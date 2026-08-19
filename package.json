@@ -7,7 +7,8 @@
   "types": "src/index.ts",
   "scripts": {
     "test:unit": "vitest run --config vitest.unit.config.ts",
-    "test:cov": "vitest run --config vitest.unit.config.ts --coverage"
+    "test:cov": "vitest run --config vitest.unit.config.ts --coverage",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "typescript": "5.9.3",
