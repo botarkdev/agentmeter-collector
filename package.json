@@ -5,7 +5,11 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "agentmeter": "dist/cli/agentmeter.js"
+  },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:cov": "vitest run --config vitest.unit.config.ts --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit"
