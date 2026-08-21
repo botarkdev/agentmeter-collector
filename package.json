@@ -12,7 +12,8 @@
     "build": "tsc -p tsconfig.build.json",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:cov": "vitest run --config vitest.unit.config.ts --coverage",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:cov:unit": "vitest run --config vitest.unit.config.ts --coverage"
   },
   "devDependencies": {
     "typescript": "5.9.3",
