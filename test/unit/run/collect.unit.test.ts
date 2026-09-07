@@ -44,10 +44,7 @@ describe("collectMeasurements", () => {
       depsFor({ "/t/a.jsonl": [turnA, turnB] }),
     );
 
-    expect(result.entries.map((entry) => entry.idempotencyKey).sort()).toEqual([
-      "msg_a",
-      "msg_b",
-    ]);
+    expect(result.entries.map((entry) => entry.idempotencyKey).sort()).toEqual(["msg_a", "msg_b"]);
     expect(outcome.turnsFound).toBe(2);
     expect(outcome.measurements).toBe(2);
   });

@@ -111,12 +111,7 @@ export function readAcceptance(body: unknown): IngestAcceptance | undefined {
 /** The closed set of values the service's error contract uses for "what should the client do
  * next" (`apps/api/src/errors/client-action.ts`). Read to decide whether a batch is retained or
  * discarded (FR-021). */
-export const CLIENT_ACTIONS = [
-  "RETRY",
-  "DO_NOT_RETRY",
-  "FIX_AND_RETRY",
-  "REAUTHENTICATE",
-] as const;
+export const CLIENT_ACTIONS = ["RETRY", "DO_NOT_RETRY", "FIX_AND_RETRY", "REAUTHENTICATE"] as const;
 
 export type ClientAction = (typeof CLIENT_ACTIONS)[number];
 

@@ -55,7 +55,11 @@ export async function readCursor(path: string): Promise<ScanCursor> {
     return emptyCursor();
   }
   const record = parsed as Record<string, unknown>;
-  if (record.version !== CURSOR_VERSION || typeof record.files !== "object" || record.files === null) {
+  if (
+    record.version !== CURSOR_VERSION ||
+    typeof record.files !== "object" ||
+    record.files === null
+  ) {
     return emptyCursor();
   }
 

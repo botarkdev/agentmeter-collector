@@ -134,11 +134,7 @@ export class RunOutcomeAccumulator {
     this.failures.set(key, { record, count: 1 });
   }
 
-  build(
-    status: RunOutcome["status"],
-    durationMs: number,
-    budgetExhausted: boolean,
-  ): RunOutcome {
+  build(status: RunOutcome["status"], durationMs: number, budgetExhausted: boolean): RunOutcome {
     return {
       status,
       scan: {

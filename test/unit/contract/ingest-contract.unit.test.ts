@@ -23,9 +23,7 @@ describe("ingestUrl", () => {
   it("appends the versioned ingest path to the configured base", () => {
     // `example.invalid` is reserved by RFC 2606 and can never resolve — a placeholder, never a
     // real host (Constitution, "Environment-specific values are never committed").
-    expect(ingestUrl("https://collector.invalid")).toBe(
-      `https://collector.invalid${INGEST_PATH}`,
-    );
+    expect(ingestUrl("https://collector.invalid")).toBe(`https://collector.invalid${INGEST_PATH}`);
   });
 
   it("tolerates trailing slashes rather than producing a double slash nobody diagnoses", () => {

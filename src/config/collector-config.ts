@@ -24,7 +24,11 @@ export interface CollectorConfig {
 }
 
 export type ResolvedConfig =
-  | { readonly status: "configured"; readonly config: CollectorConfig; readonly failures: readonly FailureRecord[] }
+  | {
+      readonly status: "configured";
+      readonly config: CollectorConfig;
+      readonly failures: readonly FailureRecord[];
+    }
   | { readonly status: "not-configured"; readonly failures: readonly FailureRecord[] };
 
 export const DEFAULT_PRICING_TIER = "standard";

@@ -88,7 +88,11 @@ describe("FileBatchQueue", () => {
     await queue.enqueue([batch("a")], 100);
 
     // A half-written batch, as a crashed run would leave it.
-    await writeFile(join(directory, "queue", "00000000000999-crashed.json.tmp"), '{"agent"', "utf8");
+    await writeFile(
+      join(directory, "queue", "00000000000999-crashed.json.tmp"),
+      '{"agent"',
+      "utf8",
+    );
 
     const names = await queue.list();
     expect(names).toHaveLength(1);

@@ -175,9 +175,9 @@ describe("HttpIngestTransport: how it reads the answer", () => {
   });
 
   it("retains and continues on a 5xx", async () => {
-    const outcome = await transportWith(async () => respond(503, { code: "X", action: "RETRY" })).deliver(
-      batch,
-    );
+    const outcome = await transportWith(async () =>
+      respond(503, { code: "X", action: "RETRY" }),
+    ).deliver(batch);
     expect(outcome).toEqual({
       kind: "retain",
       reason: "server-error",

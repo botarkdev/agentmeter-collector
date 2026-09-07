@@ -81,10 +81,7 @@ export class FileBatchQueue implements BatchQueue {
     private readonly now: () => number = () => Date.now(),
   ) {}
 
-  async enqueue(
-    batches: readonly IngestBatch[],
-    maxQueuedBatches: number,
-  ): Promise<EnqueueResult> {
+  async enqueue(batches: readonly IngestBatch[], maxQueuedBatches: number): Promise<EnqueueResult> {
     if (batches.length === 0) {
       return { enqueued: 0, discarded: 0, failed: false };
     }

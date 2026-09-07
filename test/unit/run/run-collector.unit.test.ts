@@ -196,7 +196,10 @@ describe("runCollector: never blocks, never fails", () => {
 
     const outcome = await runCollector(
       h.resolved,
-      await overridesFor(h, transportOf(() => answer)),
+      await overridesFor(
+        h,
+        transportOf(() => answer),
+      ),
     );
 
     expect(outcome.status).toBe("collected");
@@ -333,9 +336,11 @@ describe("runCollector: what it does with retained work", () => {
 
     expect(second.delivery.accepted).toBe(3);
     expect(second.queue.remaining).toBe(0);
-    expect(
-      succeeding.delivered.map((batch) => batch.measurements[0]?.idempotencyKey),
-    ).toEqual(["msg_1", "msg_2", "msg_3"]);
+    expect(succeeding.delivered.map((batch) => batch.measurements[0]?.idempotencyKey)).toEqual([
+      "msg_1",
+      "msg_2",
+      "msg_3",
+    ]);
   });
 
   it("discards a batch the service declares permanently invalid rather than retrying forever", async () => {
@@ -371,7 +376,13 @@ describe("runCollector: what it does with retained work", () => {
     await writeTranscript(join(h.transcriptsDir, "-project"), "s.jsonl", [
       assistantTurn({ messageId: "msg_a" }),
     ]);
-    await runCollector(h.resolved, await overridesFor(h, transportOf(() => UNREACHABLE)));
+    await runCollector(
+      h.resolved,
+      await overridesFor(
+        h,
+        transportOf(() => UNREACHABLE),
+      ),
+    );
 
     // Corrupt the queued batch, as a torn disk write would.
     const queueDir = queueDirectory(h.cacheDir);
@@ -401,7 +412,10 @@ describe("runCollector: what it does with retained work", () => {
 
     const outcome = await runCollector(
       h.resolved,
-      await overridesFor(h, transportOf(() => UNREACHABLE)),
+      await overridesFor(
+        h,
+        transportOf(() => UNREACHABLE),
+      ),
     );
 
     expect(outcome.queue.remaining).toBe(2);
@@ -444,7 +458,10 @@ describe("runCollector: what it writes to disk", () => {
     // Retained, not delivered — so everything this run produced is still on disk to inspect.
     const outcome = await runCollector(
       h.resolved,
-      await overridesFor(h, transportOf(() => UNREACHABLE)),
+      await overridesFor(
+        h,
+        transportOf(() => UNREACHABLE),
+      ),
     );
     expect(outcome.queue.remaining).toBeGreaterThan(0);
 
@@ -463,7 +480,13 @@ describe("runCollector: what it writes to disk", () => {
     (event.message as Record<string, unknown>).content = [{ type: "text", text: secret }];
 
     await writeTranscript(join(h.transcriptsDir, "-project"), "s.jsonl", [event]);
-    await runCollector(h.resolved, await overridesFor(h, transportOf(() => UNREACHABLE)));
+    await runCollector(
+      h.resolved,
+      await overridesFor(
+        h,
+        transportOf(() => UNREACHABLE),
+      ),
+    );
 
     for (const name of await readdir(queueDirectory(h.cacheDir))) {
       expect(await readFile(join(queueDirectory(h.cacheDir), name), "utf8")).not.toContain(secret);
