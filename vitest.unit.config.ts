@@ -5,7 +5,7 @@ export default defineConfig({
     include: ["test/unit/**/*.unit.test.ts"],
     coverage: {
       provider: "v8",
-      // TODO.md T104: declared explicitly so `text-summary` — the reporter
+      // TASKRAIL.md T104: declared explicitly so `text-summary` — the reporter
       // `scripts/ci/run-with-coverage-summary.mjs` extracts into $GITHUB_STEP_SUMMARY — is
       // present regardless of who runs this. Vitest 4 only adds it on its own when a coding
       // agent's environment variables are set (std-env's `isAgent`), and GitHub Actions sets

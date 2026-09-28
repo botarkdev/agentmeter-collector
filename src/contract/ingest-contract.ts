@@ -25,7 +25,7 @@ export interface WireTokenCounts {
 
 /**
  * One measurement on the wire. This is the COMPLETE set of fields this collector ever sends:
- * no `payload`, no `dimensions` (attribution is TODO.md row T013, and deriving one here would
+ * no `payload`, no `dimensions` (attribution is TASKRAIL.md row T013, and deriving one here would
  * mean reading the very fields FR-025 keeps off the wire), and no project or user identity —
  * both are the service's to derive from the token, and no request field can influence either.
  */

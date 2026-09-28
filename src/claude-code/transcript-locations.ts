@@ -8,7 +8,7 @@ import { join } from "node:path";
  * per git worktree, and one JSONL per session inside. This walks the whole tree rather than
  * matching a configured list of project paths the way the reference implementation does: a
  * configured list is attribution — deciding which repository a session belongs to — and
- * attribution is TODO.md row T013. Here, every transcript on the machine belongs to the one
+ * attribution is TASKRAIL.md row T013. Here, every transcript on the machine belongs to the one
  * project the configured ingest token names, and nothing reads a directory name for meaning.
  *
  * Never throws. A missing root yields nothing (a machine with no Claude Code history is a
