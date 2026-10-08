@@ -1,0 +1,28 @@
+{
+  "name": "@agentmeter/collector",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "agentmeter": "dist/cli/agentmeter.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/botarkdev/agentmeter-collector.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ]
+}

@@ -1,0 +1,17 @@
+Copyright (c) 2026 Alexander Rondon. All rights reserved.
+
+This repository is proprietary. No licence is granted.
+
+This is a deliberate choice, recorded here so that the absence of an open-source licence is
+read as a decision rather than an oversight. No permission is granted to any person to use,
+copy, modify, merge, publish, distribute, sublicense or sell any part of this repository, or
+to create derivative works from it, except under a separate written agreement signed by the
+copyright holder. All rights not expressly granted are reserved.
+
+Nothing in this file restricts anyone's rights in third-party work vendored into this
+repository. No such work is vendored here today; should any be, it remains under its own
+licence, and its attribution and notice travel with the file itself, per the constitution's
+"Third-Party & Vendored Assets" section. This file deliberately does not index them: a
+root-level list of vendored assets is a second source of truth that goes stale silently.
+
+These terms cover this repository's own work only.
