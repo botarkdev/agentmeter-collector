@@ -47,9 +47,13 @@ repository whose usage you want reported:
 pnpm add -D https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
 ```
 
-`npm install -D <the same address>` and `yarn add -D <the same address>` work the same way. The
-file is already built: installing it compiles nothing, runs no script and pulls in no other
+The file is already built: installing it compiles nothing, runs no script and pulls in no other
 package. It needs Node.js 22 or later.
+
+**With npm 12 or later, add `--allow-remote=all`**: `npm install -D --allow-remote=all <the same
+address>`. From version 12 npm refuses, by default, a dependency that is not on a registry —
+whether it is named by the address of a file or by a git repository (`allow-remote` and
+`allow-git` both default to `none`). pnpm installs the address as given.
 
 To upgrade, install the address of a later release. The version is part of the address, so a
 lockfile pins exactly the file that was reviewed.
