@@ -38,25 +38,39 @@ separate, later piece of work.
 
 ## Install it
 
-The package is published as a file attached to each
-[release of this repository](https://github.com/botarkdev/agentmeter-collector/releases), not to a
-package registry. Install a release by the address of its file, as a development dependency of the
-repository whose usage you want reported:
+The package is not on a package registry. Each
+[release of this repository](https://github.com/botarkdev/agentmeter-collector/releases) publishes
+it two ways, and either installs it as a development dependency of the repository whose usage you
+want reported.
+
+**From this repository, by tag.** Every release `v<version>` has a tag `dist-v<version>` whose tree
+is the built package:
+
+```bash
+pnpm add -D github:botarkdev/agentmeter-collector#dist-v0.2.0
+npm install -D --allow-git=all github:botarkdev/agentmeter-collector#dist-v0.2.0
+```
+
+Name the `dist-` tag, never `v0.2.0` or `main`: those hold the sources, and a package manager
+installing from git builds nothing.
+
+**By the address of the release's file:**
 
 ```bash
 pnpm add -D https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
+npm install -D --allow-remote=all https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
 ```
 
-The file is already built: installing it compiles nothing, runs no script and pulls in no other
-package. It needs Node.js 22 or later.
+Either way the package is already built: installing it compiles nothing, runs no script and pulls
+in no other package. It needs Node.js 22 or later.
 
-**With npm 12 or later, add `--allow-remote=all`**: `npm install -D --allow-remote=all <the same
-address>`. From version 12 npm refuses, by default, a dependency that is not on a registry —
-whether it is named by the address of a file or by a git repository (`allow-remote` and
-`allow-git` both default to `none`). pnpm installs the address as given.
+**The npm flags are npm 12's.** From version 12 npm refuses, by default, a dependency that is not
+on a registry, whether it is named by a git repository or by the address of a file (`allow-git`
+and `allow-remote` both default to `none`); the flag on the command line, or the same setting in
+the repository's `.npmrc`, allows it. pnpm installs both as given.
 
-To upgrade, install the address of a later release. The version is part of the address, so a
-lockfile pins exactly the file that was reviewed.
+To upgrade, install a later release's tag or address. The version is part of both, so a lockfile
+pins exactly what was reviewed.
 
 ## Use it as a library
 

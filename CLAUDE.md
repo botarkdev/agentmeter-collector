@@ -113,8 +113,12 @@ permission and no schedule; keep it that way.
 
 **Releasing**: `.github/workflows/release.yml`, started by a pushed tag `v<version>` and by
 nothing else. It fails unless the tag names the version in `package.json`, runs every check
-`tests.yml` runs, and attaches the packed file to a GitHub release — that file's address is what
-users install (`README.md`, "Install it"). Nothing is published to a package registry. A release
+`tests.yml` runs, and publishes the packed package twice: as a file attached to a GitHub release,
+and as a tree — one commit on the `dist` branch, tagged `dist-v<version>` — for installing
+straight from git (`README.md`, "Install it"). **`dist` is written by that workflow and by
+nothing else**: never commit to it, never force it, never merge it anywhere; its tree is
+`scripts/write-dist-tree.mjs`'s output, the package with a manifest stripped of `scripts` and
+`devDependencies`. Nothing is published to a package registry. A release
 is: a pull request that raises `version` in `package.json` and moves the changelog's
 `[Unreleased]` entries under the new version, merged; then the tag, on that merge. **Pushing the
 tag is the owner's**, like every other write to GitHub. `0.x`: a breaking change raises the minor

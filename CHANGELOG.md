@@ -17,8 +17,9 @@ The first release from this repository, and the first that can be installed with
 
 ### Added
 
-- The package ships its built output and is attached to each GitHub release of this repository;
-  `README.md`, "Install it", gives the address. Installing it builds nothing and runs no script.
+- The package ships its built output. Each release attaches it to a GitHub release of this
+  repository and publishes it as a tree tagged `dist-v<version>`, so it installs by address or
+  straight from git; `README.md`, "Install it". Installing it builds nothing and runs no script.
 - Type declarations.
 
 ### Changed

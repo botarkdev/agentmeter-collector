@@ -1,4 +1,5 @@
-# Publishes a release: the packed collector, attached to a GitHub release of this repository.
+# Publishes a release: the packed collector, attached to a GitHub release of this repository, and
+# the same package as a tree on the `dist` branch.
 #
 # Started by pushing a tag `v<version>` — nothing else starts it, and it runs on no schedule. The
 # tag must name the version in package.json at the tagged commit, or the run fails before it
@@ -8,8 +9,8 @@
 # It runs every check `tests.yml` runs, on the tagged commit, before it publishes. It does not rely
 # on a previous run having passed.
 #
-# `contents: write` is what creating a release needs, and is the only write permission in this
-# repository's workflows. Nothing is published to a package registry.
+# `contents: write` is what creating a release and pushing the `dist` branch need, and is the only
+# write permission in this repository's workflows. Nothing is published to a package registry.
 name: Release
 
 on:
@@ -76,3 +77,31 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: gh release create "$TAG" "$RUNNER_TEMP"/release/*.tgz --title "$TAG" --generate-notes --verify-tag
+
+      # The same package, as a tree in this repository, for installing straight from git
+      # (README.md, "Install it"): the `dist` branch gains one commit per release and a tag
+      # `dist-<tag>` names it. Never forced — a release that was installed stays installable.
+      # The pushed tag does not match this workflow's trigger, and a push made with the
+      # workflow's own token starts no workflow.
+      - name: Publish the built tree to the dist branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tree="$RUNNER_TEMP/dist-tree"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" dist >/dev/null; then
+            git clone --quiet --depth 1 --branch dist "$remote" "$tree"
+            git -C "$tree" rm -r --quiet --ignore-unmatch .
+          else
+            git init --quiet --initial-branch dist "$tree"
+            git -C "$tree" remote add origin "$remote"
+          fi
+          node scripts/write-dist-tree.mjs "$RUNNER_TEMP"/release/*.tgz "$tree"
+          git -C "$tree" add --all
+          git -C "$tree" -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet --allow-empty -m "release: $TAG"
+          git -C "$tree" tag "dist-$TAG"
+          git -C "$tree" push --quiet origin dist "dist-$TAG"
