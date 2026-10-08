@@ -1,0 +1,78 @@
+# Publishes a release: the packed collector, attached to a GitHub release of this repository.
+#
+# Started by pushing a tag `v<version>` — nothing else starts it, and it runs on no schedule. The
+# tag must name the version in package.json at the tagged commit, or the run fails before it
+# builds anything: a tarball whose name and contents disagree about the version is worse than no
+# release.
+#
+# It runs every check `tests.yml` runs, on the tagged commit, before it publishes. It does not rely
+# on a previous run having passed.
+#
+# `contents: write` is what creating a release needs, and is the only write permission in this
+# repository's workflows. Nothing is published to a package registry.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: The tag names the package's version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match package.json version $version"
+            exit 1
+          fi
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Unit tests, with coverage
+        run: pnpm test:cov
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package
+        run: pnpm check:package
+
+      - name: Pack
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/release"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" "$RUNNER_TEMP"/release/*.tgz --title "$TAG" --generate-notes --verify-tag

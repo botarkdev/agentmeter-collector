@@ -36,6 +36,24 @@ It submits no attribution dimensions at all. Deriving one would mean reading a b
 path, which is exactly what the paragraph above rules out; declaring attribution rules is a
 separate, later piece of work.
 
+## Install it
+
+The package is published as a file attached to each
+[release of this repository](https://github.com/botarkdev/agentmeter-collector/releases), not to a
+package registry. Install a release by the address of its file, as a development dependency of the
+repository whose usage you want reported:
+
+```bash
+pnpm add -D https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
+```
+
+`npm install -D <the same address>` and `yarn add -D <the same address>` work the same way. The
+file is already built: installing it compiles nothing, runs no script and pulls in no other
+package. It needs Node.js 22 or later.
+
+To upgrade, install the address of a later release. The version is part of the address, so a
+lockfile pins exactly the file that was reviewed.
+
 ## Use it as a library
 
 ```ts
@@ -47,26 +65,30 @@ const outcome = await runCollector(resolveConfigFromEnv(process.env));
 
 ## Use it from a hook
 
-```bash
-pnpm install
-pnpm build
-```
+With the package installed in a repository, have Claude Code run it when a session ends:
 
 ```jsonc
 // .claude/settings.json
 {
   "hooks": {
     "SessionEnd": [
-      { "hooks": [{ "type": "command", "command": "agentmeter push" }] }
+      { "hooks": [{ "type": "command", "command": "pnpm exec agentmeter push" }] }
     ]
   }
 }
 ```
 
+(`npx agentmeter push` with npm.) This file can be committed: it holds no value of any
+environment. The endpoint and the token go where the next section says, never here.
+
+The hook does nothing, and says so, on a machine where the two required variables are not set —
+so a repository can commit it before every contributor has a token.
+
 ## Configuration
 
-Every value comes from the environment. None of them may be committed to any file (Constitution,
-"Environment-specific values are never committed"). Only the first two are required; without them
+Every value comes from the environment, and none of them belongs in a committed file. For Claude
+Code, the `env` block of the git-ignored `.claude/settings.local.json` is read at session start
+and reaches the hook. Only the first two are required; without them
 the collector does nothing, says so, and exits 0 — a hook fires in repositories that never opted
 in.
 
@@ -110,7 +132,8 @@ Run from the repository root.
 
 | Command | What it does |
 | --- | --- |
-| `pnpm build` | Compiles to `dist/`, which is what the `agentmeter` binary runs from. |
+| `pnpm build` | Compiles to `dist/`, which is what the package ships and the `agentmeter` binary runs from. |
+| `pnpm check:package` | Packs the build as a release does, installs the file into an empty project with no network, and runs the installed binary. |
 | `pnpm test:unit` | Runs `*.unit.test.ts`. No network, and nothing outside a temporary directory. |
 | `pnpm test:cov` | Runs the unit suite with coverage; fails below the declared 80% threshold. |
 | `pnpm typecheck` | Type-checks sources and tests. |
