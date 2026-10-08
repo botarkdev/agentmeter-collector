@@ -111,18 +111,23 @@ as an `invalid-setting` failure naming the variable, never its value.
 build and the packed artefact — on every pull request and every push to `main`. It holds no write
 permission and no schedule; keep it that way.
 
-**Releasing**: `.github/workflows/release.yml`, started by a pushed tag `v<version>` and by
-nothing else. It fails unless the tag names the version in `package.json`, runs every check
-`tests.yml` runs, and publishes the packed package twice: as a file attached to a GitHub release,
-and as a tree — one commit on the `dist` branch, tagged `dist-v<version>` — for installing
-straight from git (`README.md`, "Install it"). **`dist` is written by that workflow and by
-nothing else**: never commit to it, never force it, never merge it anywhere; its tree is
+**Releasing**: `.github/workflows/release.yml`. **A release is a version on `main` that has not
+been published**: on every push to `main` the workflow reads `version` from `package.json` and
+looks for the tags `v<version>` and `dist-v<version>`; when either is missing it runs every check
+`tests.yml` runs and publishes what is missing. So a release is one pull request — the one that
+raises `version` in `package.json` and moves the changelog's `[Unreleased]` entries under the new
+version — and merging it is the release. **Nobody pushes a tag**: the workflow creates both, and
+a tag pushed by hand starts nothing. The version is raised by hand, in that pull request and in no
+other; `0.x`: a breaking change raises the minor version. A push that does not change the version
+ends in seconds, having found both tags.
+
+It publishes the packed package twice: as a file attached to a GitHub release, and as a tree —
+one commit on the `dist` branch, tagged `dist-v<version>` — for installing straight from git
+(`README.md`, "Install it"). **`dist` is written by that workflow and by nothing else**: never
+commit to it, never force it, never merge it anywhere; its tree is
 `scripts/write-dist-tree.mjs`'s output, the package with a manifest stripped of `scripts` and
-`devDependencies`. Nothing is published to a package registry. A release
-is: a pull request that raises `version` in `package.json` and moves the changelog's
-`[Unreleased]` entries under the new version, merged; then the tag, on that merge. **Pushing the
-tag is the owner's**, like every other write to GitHub. `0.x`: a breaking change raises the minor
-version.
+`devDependencies`. A run that fails half-way is resumed by re-running it: it publishes only what
+is still missing. Nothing is published to a package registry.
 
 **Not here yet**: publication to a package registry — the package stays `private` so that it
 cannot be published to one by accident, and its name is not settled (`@agentmeter/collector` is a

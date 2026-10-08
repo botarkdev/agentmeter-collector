@@ -1,46 +1,86 @@
 # Publishes a release: the packed collector, attached to a GitHub release of this repository, and
 # the same package as a tree on the `dist` branch.
 #
-# Started by pushing a tag `v<version>` — nothing else starts it, and it runs on no schedule. The
-# tag must name the version in package.json at the tagged commit, or the run fails before it
-# builds anything: a tarball whose name and contents disagree about the version is worse than no
-# release.
+# A RELEASE IS A VERSION ON `main` THAT HAS NOT BEEN PUBLISHED. On every push to `main` the
+# `decide` job reads `version` from package.json and looks for the two tags a release leaves,
+# `v<version>` and `dist-v<version>`. Both there: nothing to do, and the run ends in seconds.
+# Either missing: the `release` job publishes what is missing. So merging the pull request that
+# raises the version IS the release; nobody pushes a tag, and no tag starts anything.
 #
-# It runs every check `tests.yml` runs, on the tagged commit, before it publishes. It does not rely
-# on a previous run having passed.
+# It is one workflow, not a tagging workflow and a publishing one, because a tag pushed with a
+# workflow's own token starts no workflow.
 #
-# `contents: write` is what creating a release and pushing the `dist` branch need, and is the only
-# write permission in this repository's workflows. Nothing is published to a package registry.
+# It resumes. A run that created the release and failed before the `dist` branch finds
+# `v<version>` on its next run and publishes only the tree; re-run the failed run, or push again.
+#
+# It runs every check `tests.yml` runs, on the commit it releases, before it publishes. It does not
+# rely on another run having passed.
+#
+# `contents: write` belongs to the `release` job alone — it is what creating a release and pushing
+# the `dist` branch need, and the only write permission in this repository's workflows. Nothing is
+# published to a package registry, and nothing runs on a schedule.
 name: Release
 
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
+# One at a time, never cancelled: a release interrupted half-way is the state the resume exists
+# for, not one to produce on purpose.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
-  release:
+  decide:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 2
+    outputs:
+      tag: ${{ steps.decide.outputs.tag }}
+      release: ${{ steps.decide.outputs.release }}
+      tree: ${{ steps.decide.outputs.tree }}
     steps:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: The tag names the package's version
-        env:
-          TAG: ${{ github.ref_name }}
+      - name: Which of the version's two tags are missing
+        id: decide
         run: |
+          set -euo pipefail
           version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::tag $TAG does not match package.json version $version"
-            exit 1
-          fi
+          tag="v$version"
+          missing() {
+            # ls-remote exits 2 when the ref is absent, and anything else is a failure to ask.
+            local status=0
+            git ls-remote --exit-code --tags origin "refs/tags/$1" >/dev/null || status=$?
+            case "$status" in
+              0) echo false ;;
+              2) echo true ;;
+              *) echo "::error::could not ask the remote about tag $1" >&2; exit 1 ;;
+            esac
+          }
+          release="$(missing "$tag")"
+          tree="$(missing "dist-$tag")"
+          {
+            echo "tag=$tag"
+            echo "release=$release"
+            echo "tree=$tree"
+          } >> "$GITHUB_OUTPUT"
+          echo "version $version: release missing=$release, dist tree missing=$tree" >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    needs: decide
+    if: needs.decide.outputs.release == 'true' || needs.decide.outputs.tree == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -72,21 +112,23 @@ jobs:
       - name: Pack
         run: pnpm pack --pack-destination "$RUNNER_TEMP/release"
 
+      # Creates the tag `v<version>` on the commit this run checked out, with the release.
       - name: Publish the release
+        if: needs.decide.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" "$RUNNER_TEMP"/release/*.tgz --title "$TAG" --generate-notes --verify-tag
+          TAG: ${{ needs.decide.outputs.tag }}
+        run: gh release create "$TAG" "$RUNNER_TEMP"/release/*.tgz --target "$GITHUB_SHA" --title "$TAG" --generate-notes
 
       # The same package, as a tree in this repository, for installing straight from git
       # (README.md, "Install it"): the `dist` branch gains one commit per release and a tag
       # `dist-<tag>` names it. Never forced — a release that was installed stays installable.
-      # The pushed tag does not match this workflow's trigger, and a push made with the
-      # workflow's own token starts no workflow.
+      # A push made with the workflow's own token starts no workflow, and `dist` is not `main`.
       - name: Publish the built tree to the dist branch
+        if: needs.decide.outputs.tree == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ needs.decide.outputs.tag }}
         run: |
           set -euo pipefail
           tree="$RUNNER_TEMP/dist-tree"
