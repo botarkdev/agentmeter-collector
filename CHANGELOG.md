@@ -5,13 +5,9 @@ All notable changes to the **collector** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Releases are cut **per target**: collector is versioned and tagged independently of every
-other workspace member, using the tag form `@agentmeter/collector/vX.Y.Z`. Sections here are written
-by `scripts/generate-changelog.mjs` at release time, from the same Conventional
-Commits the version bump is computed from.
-
-Sections headed `## <version> — <date>`, further down, predate that script: they were written by
-this repository's earlier release command (spec 0039) and are kept exactly as they were.
+Versions up to 0.1.1 were released from the agentmeter monorepo, where this package lived as
+`packages/collector` until it moved to a repository of its own; their sections are kept exactly as
+they were written there, and the pull request numbers in them are that repository's.
 
 ## [Unreleased]
 

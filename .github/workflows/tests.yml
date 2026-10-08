@@ -1,0 +1,50 @@
+# The one workflow of this repository: formatting, types, the unit suite under coverage, and the
+# build, on every pull request and on every push to `main`.
+#
+# It holds no write permission, runs on no schedule and publishes nothing. Publishing the package
+# is a separate piece of work and gets its own workflow when it exists.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Unit tests, with coverage
+        run: pnpm test:cov
+
+      - name: Build
+        run: pnpm build

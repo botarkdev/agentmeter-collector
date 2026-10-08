@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+
+# Per-developer preferences (statusline, permissions, credentials in its `env` block)
+.claude/settings.local.json
+
+# Task worktrees
+.claude/worktrees/
+.worktrees/

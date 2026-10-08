@@ -6,7 +6,7 @@ failing the agent session that produced them.
 Today it carries one adapter, for Claude Code: it scans the JSONL session transcripts Claude Code
 already writes, normalises each assistant turn to agentmeter's ingestion contract, keeps on disk
 whatever it could not deliver, and sends. See
-[`specs/0019-claude-code-collector/`](../../specs/0019-claude-code-collector/) for what it does and
+[`specs/0019-claude-code-collector/`](specs/0019-claude-code-collector/) for what it does and
 why it does it that way.
 
 ## The two things worth knowing before you use it
@@ -40,7 +40,8 @@ const outcome = await runCollector(resolveConfigFromEnv(process.env));
 ## Use it from a hook
 
 ```bash
-pnpm --filter @agentmeter/collector build
+pnpm install
+pnpm build
 ```
 
 ```jsonc
@@ -92,8 +93,7 @@ Transcripts themselves are opened read-only and never modified.
 
 ## Commands
 
-Run from this directory, or via `pnpm --filter @agentmeter/collector <script>` from the repository
-root.
+Run from the repository root.
 
 | Command | What it does |
 | --- | --- |
@@ -101,6 +101,7 @@ root.
 | `pnpm test:unit` | Runs `*.unit.test.ts`. No network, and nothing outside a temporary directory. |
 | `pnpm test:cov` | Runs the unit suite with coverage; fails below the declared 80% threshold. |
 | `pnpm typecheck` | Type-checks sources and tests. |
+| `pnpm format:check` | Fails on a file Prettier would rewrite; `pnpm format` rewrites it. |
 
 ## Public surface
 

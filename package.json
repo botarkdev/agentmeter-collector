@@ -13,11 +13,22 @@
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:cov": "vitest run --config vitest.unit.config.ts --coverage",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:cov:unit": "vitest run --config vitest.unit.config.ts --coverage"
+    "format": "prettier --write \"**/*.{ts,mts,cts,js,mjs,cjs,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,mts,cts,js,mjs,cjs,json}\""
   },
   "devDependencies": {
+    "@types/node": "22.20.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "prettier": "3.9.6",
     "typescript": "5.9.3",
-    "vitest": "4.1.10",
-    "@vitest/coverage-v8": "4.1.10"
+    "vitest": "4.1.10"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/botarkdev/agentmeter-collector.git"
+  },
+  "packageManager": "pnpm@11.3.0",
+  "engines": {
+    "node": ">=22"
   }
 }

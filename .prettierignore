@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+pnpm-lock.yaml
+
+# Copied byte for byte from genki (CLAUDE.md, "Working with the repository owner"): it stays in
+# its source's style so a diff against the source shows nothing.
+scripts/telegram-notify.mjs

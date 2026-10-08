@@ -1,0 +1,7 @@
+# Not a workspace: this file exists for pnpm's settings only.
+#
+# Dependency build scripts are approved explicitly and the approval is committed; an `.npmrc`
+# carrying `approve-builds=true` is forbidden. `esbuild` is approved because its install script
+# fetches the platform-native binary vitest needs to run at all.
+allowBuilds:
+  esbuild: true
