@@ -15,7 +15,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write \"**/*.{ts,mts,cts,js,mjs,cjs,json}\"",
     "format:check": "prettier --check \"**/*.{ts,mts,cts,js,mjs,cjs,json}\"",
-    "check:package": "node scripts/check-package.mjs"
+    "check:package": "node scripts/check-package.mjs",
+    "prepack": "node scripts/clean-dist.mjs && tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "@types/node": "22.20.1",
