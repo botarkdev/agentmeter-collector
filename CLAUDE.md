@@ -93,7 +93,8 @@ only.
 | `pnpm test:cov` | The same, with coverage; fails below 80% lines, statements, functions or branches. |
 | `pnpm typecheck` | Type-checks sources and tests. |
 | `pnpm format:check` | Fails on a file Prettier would rewrite. `pnpm format` rewrites it. |
-| `pnpm build` | Compiles `src/` to `dist/`, which is what the `agentmeter` binary runs from. |
+| `pnpm build` | Removes `dist/` and compiles `src/` into it. `dist/` is the whole package: `package.json` ships nothing else. |
+| `pnpm check:package` | After a build: packs the collector as a release does, checks what is and is not in the file, installs it into an empty project with no network and runs the installed binary. The only check on the artefact — the unit suite imports `src/` and cannot see a package that ships without its binary. |
 
 **Tests**: unit tests only, every dependency injected and mocked, no network, no file outside a
 temporary directory. A behaviour is tested through the public function that has it, and a bug is
@@ -106,13 +107,27 @@ endpoint, token, host or port is committed to any file, as a default or as an ex
 be mistaken for one. A tuning variable that is not valid falls back to its default and is reported
 as an `invalid-setting` failure naming the variable, never its value.
 
-**CI**: one workflow, `.github/workflows/tests.yml` — formatting, types, the unit suite under
-coverage, the build — on every pull request and every push to `main`. It holds no write
+**CI**: `.github/workflows/tests.yml` — formatting, types, the unit suite under coverage, the
+build and the packed artefact — on every pull request and every push to `main`. It holds no write
 permission and no schedule; keep it that way.
 
-**Not here yet**: the package is `private` and its `main` points at TypeScript source, so it can
-only be used from a clone. Publishing it, with a built entry point, is the next piece of work. So
-are attribution rules a repository declares, privacy controls, and a second agent adapter. There is no backlog file in this repository yet.
+**Releasing**: `.github/workflows/release.yml`, started by a pushed tag `v<version>` and by
+nothing else. It fails unless the tag names the version in `package.json`, runs every check
+`tests.yml` runs, and publishes the packed package twice: as a file attached to a GitHub release,
+and as a tree — one commit on the `dist` branch, tagged `dist-v<version>` — for installing
+straight from git (`README.md`, "Install it"). **`dist` is written by that workflow and by
+nothing else**: never commit to it, never force it, never merge it anywhere; its tree is
+`scripts/write-dist-tree.mjs`'s output, the package with a manifest stripped of `scripts` and
+`devDependencies`. Nothing is published to a package registry. A release
+is: a pull request that raises `version` in `package.json` and moves the changelog's
+`[Unreleased]` entries under the new version, merged; then the tag, on that merge. **Pushing the
+tag is the owner's**, like every other write to GitHub. `0.x`: a breaking change raises the minor
+version.
+
+**Not here yet**: publication to a package registry — the package stays `private` so that it
+cannot be published to one by accident, and its name is not settled (`@agentmeter/collector` is a
+scope nobody has registered). Nor attribution rules a repository declares, privacy controls, or a
+second agent adapter. There is no backlog file in this repository yet.
 
 **The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
 carried in the service's repository: it grants nobody permission to use it. That is at odds with

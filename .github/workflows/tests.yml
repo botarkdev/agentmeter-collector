@@ -1,8 +1,8 @@
-# The one workflow of this repository: formatting, types, the unit suite under coverage, and the
-# build, on every pull request and on every push to `main`.
+# Formatting, types, the unit suite under coverage, the build and the packed artefact, on every
+# pull request and on every push to `main`.
 #
-# It holds no write permission, runs on no schedule and publishes nothing. Publishing the package
-# is a separate piece of work and gets its own workflow when it exists.
+# It holds no write permission, runs on no schedule and publishes nothing: `release.yml` is the
+# workflow that publishes, and it runs these same checks first.
 name: Tests
 
 on:
@@ -48,3 +48,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # The artefact, not the sources: packs it as a release does, installs it from the tarball
+      # alone and runs the installed binary (scripts/check-package.mjs).
+      - name: Package
+        run: pnpm check:package

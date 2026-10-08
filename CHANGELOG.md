@@ -11,6 +11,17 @@ they were written there, and the pull request numbers in them are that repositor
 
 ## [Unreleased]
 
+## 0.2.0 — 2026-10-08
+
+The first release from this repository, and the first that can be installed without a clone.
+
+### Added
+
+- The package ships its built output. Each release attaches it to a GitHub release of this
+  repository and publishes it as a tree tagged `dist-v<version>`, so it installs by address or
+  straight from git; `README.md`, "Install it". Installing it builds nothing and runs no script.
+- Type declarations.
+
 ### Changed
 
 - **A run reports only the repository it was started in.** It used to report every transcript on

@@ -1,0 +1,107 @@
+# Publishes a release: the packed collector, attached to a GitHub release of this repository, and
+# the same package as a tree on the `dist` branch.
+#
+# Started by pushing a tag `v<version>` — nothing else starts it, and it runs on no schedule. The
+# tag must name the version in package.json at the tagged commit, or the run fails before it
+# builds anything: a tarball whose name and contents disagree about the version is worse than no
+# release.
+#
+# It runs every check `tests.yml` runs, on the tagged commit, before it publishes. It does not rely
+# on a previous run having passed.
+#
+# `contents: write` is what creating a release and pushing the `dist` branch need, and is the only
+# write permission in this repository's workflows. Nothing is published to a package registry.
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: The tag names the package's version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match package.json version $version"
+            exit 1
+          fi
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Formatting
+        run: pnpm format:check
+
+      - name: Types
+        run: pnpm typecheck
+
+      - name: Unit tests, with coverage
+        run: pnpm test:cov
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package
+        run: pnpm check:package
+
+      - name: Pack
+        run: pnpm pack --pack-destination "$RUNNER_TEMP/release"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" "$RUNNER_TEMP"/release/*.tgz --title "$TAG" --generate-notes --verify-tag
+
+      # The same package, as a tree in this repository, for installing straight from git
+      # (README.md, "Install it"): the `dist` branch gains one commit per release and a tag
+      # `dist-<tag>` names it. Never forced — a release that was installed stays installable.
+      # The pushed tag does not match this workflow's trigger, and a push made with the
+      # workflow's own token starts no workflow.
+      - name: Publish the built tree to the dist branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tree="$RUNNER_TEMP/dist-tree"
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" dist >/dev/null; then
+            git clone --quiet --depth 1 --branch dist "$remote" "$tree"
+            git -C "$tree" rm -r --quiet --ignore-unmatch .
+          else
+            git init --quiet --initial-branch dist "$tree"
+            git -C "$tree" remote add origin "$remote"
+          fi
+          node scripts/write-dist-tree.mjs "$RUNNER_TEMP"/release/*.tgz "$tree"
+          git -C "$tree" add --all
+          git -C "$tree" -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet --allow-empty -m "release: $TAG"
+          git -C "$tree" tag "dist-$TAG"
+          git -C "$tree" push --quiet origin dist "dist-$TAG"
