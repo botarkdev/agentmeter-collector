@@ -9,7 +9,7 @@ whatever it could not deliver, and sends. See
 [`specs/0019-claude-code-collector/`](specs/0019-claude-code-collector/) for what it does and
 why it does it that way.
 
-## The two things worth knowing before you use it
+## The three things worth knowing before you use it
 
 **It cannot fail your session.** `runCollector` never rejects and `agentmeter push` always exits 0
 — for an unreachable service, an expired token, a corrupt transcript, an unwritable cache
@@ -23,6 +23,14 @@ identifier, an instant, a session id, a model, a tier, and five token counts. No
 message content, tool input or output, file contents, file paths, your working directory or your
 git branch is transmitted — enforced by an allowlist projection and covered by a test that fails if
 it stops holding, not by a promise in a comment.
+
+**It reports the repository it runs in, and no other.** Your machine holds the transcripts of
+every repository you work in, and one ingest token names one project. A run started in a
+repository — at its root, in a subdirectory, or in one of its worktrees — reports that
+repository's sessions and leaves the rest alone. It decides by where a session ran; that path is
+read on your machine and never sent. See
+[`specs/repository-scope/decision.md`](specs/repository-scope/decision.md), including what happens
+to a repository's history when you move it.
 
 It submits no attribution dimensions at all. Deriving one would mean reading a branch name or a
 path, which is exactly what the paragraph above rules out; declaring attribution rules is a
@@ -68,6 +76,7 @@ in.
 | `AGENTMETER_TOKEN` | — | Ingest token, sent as `Authorization: Bearer`. Never written to disk, to stdout, or into a queued batch. |
 | `AGENTMETER_PRICING_TIER` | `standard` | The pricing tier asserted on each measurement. The collector holds no price table and cannot compute this; the service treats it as the client's assertion. |
 | `AGENTMETER_TRANSCRIPTS_DIR` | `~/.claude/projects` | Where Claude Code writes session transcripts. |
+| `AGENTMETER_SCOPE` | `repository` | `repository` reports only the sessions of the repository the run was started in. `machine` reports every transcript under the directory above — use it only with a token whose project is meant to hold all of them. |
 | `AGENTMETER_CACHE_DIR` | `$XDG_CACHE_HOME/agentmeter`, else `~/.cache/agentmeter` | Holds the queue of undelivered batches and the scan cursor. Both are disposable. |
 | `AGENTMETER_MAX_BATCH_SIZE` | `200` | Measurements per request. |
 | `AGENTMETER_MAX_QUEUED_BATCHES` | `512` | Ceiling on undelivered batches; the oldest are discarded first, and the discard is reported. |
@@ -80,7 +89,11 @@ metrics stop being collected, and must not be silent either.
 
 ## What it puts on your disk
 
-Both live under `AGENTMETER_CACHE_DIR` and both are safe to delete at any time:
+Under `AGENTMETER_CACHE_DIR`, and safe to delete at any time. Each repository has a directory of
+its own there, `repositories/<digest>/`, named by a digest of the repository's path rather than by
+the path; a run with `AGENTMETER_SCOPE=machine` uses the cache directory itself. They are kept
+apart because a queued batch holds no token: shared, one repository's undelivered usage would be
+sent under another's. Each holds:
 
 - `queue/` — one file per undelivered batch, written and renamed atomically. Each holds exactly
   the request body that will be sent: no token, no endpoint. That is what lets a rotated token or

@@ -33,6 +33,8 @@ export interface AssistantTurnOptions {
   /** Set instead of the itemised `cache_creation` object, to exercise the fallback derivation. */
   readonly flatCacheCreation?: number;
   readonly omitItemisedCacheCreation?: boolean;
+  /** The working directory the turn records. Absent by default, as on a turn that records none. */
+  readonly cwd?: string;
 }
 
 /** One assistant turn, shaped like the real thing. Fields set to `null` are omitted entirely, so
@@ -70,6 +72,9 @@ export function assistantTurn(options: AssistantTurnOptions = {}): Record<string
   }
   if (options.requestId !== undefined) {
     event.requestId = options.requestId;
+  }
+  if (options.cwd !== undefined) {
+    event.cwd = options.cwd;
   }
   return event;
 }

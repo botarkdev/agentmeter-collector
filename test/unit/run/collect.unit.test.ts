@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { collectMeasurements, type CollectDependencies } from "../../../src/run/collect.js";
 import { emptyCursor, type ScanCursor } from "../../../src/cursor/scan-cursor.js";
 import { RunOutcomeAccumulator } from "../../../src/run/run-outcome.js";
+import { repositoryScope } from "../../../src/scope/turn-scope.js";
 import { assistantTurn } from "../support/transcripts.js";
 
 /** An in-memory filesystem: `path -> lines`. Every dependency of `collectMeasurements` is
@@ -287,5 +288,102 @@ describe("collectMeasurements", () => {
       reason: "unparsable-line",
       count: 2,
     });
+  });
+});
+describe("collectMeasurements: with a repository scope", () => {
+  const ROOT = "/work/acme/widgets";
+  const scope = repositoryScope(ROOT, "/t");
+  const OWN = "/t/-work-acme-widgets/s.jsonl";
+  const WORKTREE = "/t/-work-acme-widgets--worktrees-task/s.jsonl";
+  const SIBLING = "/t/-work-acme-widgets-collector/s.jsonl";
+
+  it("takes every turn of a transcript in the repository's own project directory", async () => {
+    // Neither turn's working directory is inside the root: one records a path the repository had
+    // before it was moved, the other records none. The directory they are kept in decides.
+    const moved = assistantTurn({ messageId: "msg_moved", cwd: "/old/place/widgets" });
+    const bare = assistantTurn({ messageId: "msg_bare" });
+    const outcome = new RunOutcomeAccumulator();
+
+    const result = await collectMeasurements(
+      [OWN],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ [OWN]: [moved, bare] }),
+      scope,
+    );
+
+    expect(result.entries.map((entry) => entry.idempotencyKey).sort()).toEqual([
+      "msg_bare",
+      "msg_moved",
+    ]);
+    expect(outcome.turnsOutOfScope).toBe(0);
+  });
+
+  it("takes from any other transcript only the turns that ran inside the repository", async () => {
+    const inWorktree = assistantTurn({ messageId: "msg_in", cwd: `${ROOT}/.worktrees/task` });
+    const elsewhere = assistantTurn({ messageId: "msg_out", cwd: "/work/acme/gadgets" });
+    const outcome = new RunOutcomeAccumulator();
+
+    const result = await collectMeasurements(
+      [WORKTREE],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ [WORKTREE]: [inWorktree, elsewhere] }),
+      scope,
+    );
+
+    expect(result.entries.map((entry) => entry.idempotencyKey)).toEqual(["msg_in"]);
+    expect(outcome.turnsFound).toBe(1);
+    expect(outcome.turnsOutOfScope).toBe(1);
+  });
+
+  it("leaves out a sibling repository whose name starts with this one's", async () => {
+    const sibling = assistantTurn({ messageId: "msg_sibling", cwd: `${ROOT}-collector` });
+    const outcome = new RunOutcomeAccumulator();
+
+    const result = await collectMeasurements(
+      [SIBLING],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ [SIBLING]: [sibling] }),
+      scope,
+    );
+
+    expect(result.entries).toEqual([]);
+    expect(outcome.turnsOutOfScope).toBe(1);
+  });
+
+  it("records how far it read a transcript it kept nothing from, so it is not read again", async () => {
+    const elsewhere = assistantTurn({ messageId: "msg_out", cwd: "/work/acme/gadgets" });
+
+    const result = await collectMeasurements(
+      [SIBLING],
+      emptyCursor(),
+      "standard",
+      new RunOutcomeAccumulator(),
+      depsFor({ [SIBLING]: [elsewhere] }),
+      scope,
+    );
+
+    expect(result.nextCursor.files[SIBLING]).toEqual({ size: 1, mtimeMs: 1, offset: 1 });
+  });
+
+  it("reports every turn when no scope is given", async () => {
+    const elsewhere = assistantTurn({ messageId: "msg_out", cwd: "/work/acme/gadgets" });
+    const outcome = new RunOutcomeAccumulator();
+
+    const result = await collectMeasurements(
+      [SIBLING],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ [SIBLING]: [elsewhere] }),
+    );
+
+    expect(result.entries).toHaveLength(1);
+    expect(outcome.turnsOutOfScope).toBe(0);
   });
 });

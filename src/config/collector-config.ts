@@ -16,6 +16,9 @@ export interface CollectorConfig {
   readonly token: string;
   readonly pricingTier: string;
   readonly transcriptsDir: string;
+  /** `repository`: only the repository the run was started in. `machine`: every transcript under
+   * `transcriptsDir` (specs/repository-scope/decision.md). */
+  readonly scope: CollectionScope;
   readonly cacheDir: string;
   readonly maxBatchSize: number;
   readonly maxQueuedBatches: number;
@@ -31,6 +34,9 @@ export type ResolvedConfig =
     }
   | { readonly status: "not-configured"; readonly failures: readonly FailureRecord[] };
 
+export type CollectionScope = "repository" | "machine";
+
+export const DEFAULT_SCOPE: CollectionScope = "repository";
 export const DEFAULT_PRICING_TIER = "standard";
 export const DEFAULT_MAX_BATCH_SIZE = 200;
 export const DEFAULT_MAX_QUEUED_BATCHES = 512;
@@ -75,6 +81,28 @@ function positiveInteger(
 }
 
 /**
+ * The scope, with the same rule as a tuning variable: a value that is neither of the two falls
+ * back to the default and is reported. The default is the narrower one on purpose — a typo must
+ * not be what turns one repository's reporting into the whole machine's.
+ */
+function collectionScope(raw: string | undefined, failures: FailureRecord[]): CollectionScope {
+  const value = trimmed(raw);
+  if (value === undefined) {
+    return DEFAULT_SCOPE;
+  }
+  if (value === "repository" || value === "machine") {
+    return value;
+  }
+  failures.push({
+    stage: "config",
+    reason: "invalid-setting",
+    count: 1,
+    detail: "AGENTMETER_SCOPE",
+  });
+  return DEFAULT_SCOPE;
+}
+
+/**
  * Reads the collector's configuration out of the environment. Never throws.
  *
  * `home` is a parameter rather than a call to `os.homedir()` inside the defaults so the whole
@@ -97,6 +125,7 @@ export function resolveConfigFromEnv(env: EnvLike, home: string = homedir()): Re
     pricingTier: trimmed(env.AGENTMETER_PRICING_TIER) ?? DEFAULT_PRICING_TIER,
     transcriptsDir:
       trimmed(env.AGENTMETER_TRANSCRIPTS_DIR) ?? join(home, ...CLAUDE_TRANSCRIPTS_SUBPATH),
+    scope: collectionScope(env.AGENTMETER_SCOPE, failures),
     cacheDir: trimmed(env.AGENTMETER_CACHE_DIR) ?? join(cacheRoot, "agentmeter"),
     maxBatchSize: positiveInteger(
       env.AGENTMETER_MAX_BATCH_SIZE,

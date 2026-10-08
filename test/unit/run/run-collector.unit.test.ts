@@ -29,6 +29,9 @@ async function harness(env: Record<string, string> = {}): Promise<Harness> {
       AGENTMETER_TOKEN: TOKEN,
       AGENTMETER_TRANSCRIPTS_DIR: transcriptsDir,
       AGENTMETER_CACHE_DIR: cacheDir,
+      // Every suite below but the last is about scanning, retaining and delivering, and says so
+      // against the whole transcripts directory. The scope has a suite of its own.
+      AGENTMETER_SCOPE: "machine",
       ...env,
     },
     "/home/placeholder",
@@ -521,5 +524,140 @@ describe("runCollector: default wiring", () => {
     expect(outcome.status).toBe("collected");
     expect(outcome.queue.remaining).toBe(1);
     fetchSpy.mockRestore();
+  });
+});
+describe("runCollector: scoped to a repository", () => {
+  const ROOT = "/work/acme/widgets";
+  const OTHER_ROOT = "/work/acme/gadgets";
+  const inRoot = (root: string) => ({ repositoryRoot: async () => root });
+
+  /** Two repositories' sessions on one machine, plus a session opened in a worktree of the first. */
+  async function twoRepositories(h: Harness): Promise<void> {
+    await writeTranscript(join(h.transcriptsDir, "-work-acme-widgets"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_widgets", cwd: ROOT }),
+    ]);
+    await writeTranscript(join(h.transcriptsDir, "-work-acme-widgets--worktrees-task"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_widgets_worktree", cwd: `${ROOT}/.worktrees/task` }),
+    ]);
+    await writeTranscript(join(h.transcriptsDir, "-work-acme-gadgets"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_gadgets", cwd: OTHER_ROOT }),
+    ]);
+  }
+
+  it("sends the repository's own sessions and its worktrees', and nobody else's", async () => {
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(h.resolved, { transport }, inRoot(ROOT));
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.idempotencyKey).sort()).toEqual([
+      "msg_widgets",
+      "msg_widgets_worktree",
+    ]);
+    expect(outcome.scan.turnsOutOfScope).toBe(1);
+  });
+
+  it("still sends nothing but the declared fields — the working directory selects, and stays", async () => {
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(h.resolved, { transport }, inRoot(ROOT));
+
+    const serialised = JSON.stringify(transport.delivered);
+    expect(serialised).not.toContain("acme");
+    expect(serialised).not.toContain("widgets/");
+    expect(serialised).not.toContain("worktrees");
+  });
+
+  it("lets the other repository find its own turns afterwards", async () => {
+    // The first run reads the other repository's transcript and keeps nothing from it. If the two
+    // shared a cursor, that transcript would now be marked as read and never reported.
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    await runCollector(h.resolved, { transport: transportOf(ACCEPT_ALL) }, inRoot(ROOT));
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(h.resolved, { transport }, inRoot(OTHER_ROOT));
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.idempotencyKey)).toEqual(["msg_gadgets"]);
+  });
+
+  it("never delivers one repository's retained batch on another repository's run", async () => {
+    // A queued batch holds no token. Shared, it would be drained by whichever repository ran
+    // next, under that repository's token, into that repository's project.
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    const retained = await runCollector(
+      h.resolved,
+      { transport: transportOf(() => UNREACHABLE) },
+      inRoot(ROOT),
+    );
+    expect(retained.queue.remaining).toBe(1);
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(h.resolved, { transport }, inRoot(OTHER_ROOT));
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.idempotencyKey)).toEqual(["msg_gadgets"]);
+  });
+
+  it("delivers its own retained batch on its own next run", async () => {
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    await runCollector(h.resolved, { transport: transportOf(() => UNREACHABLE) }, inRoot(ROOT));
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(h.resolved, { transport }, inRoot(ROOT));
+
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(2);
+    expect(outcome.queue.remaining).toBe(0);
+  });
+
+  it("sends nothing, and does not raise, when the repository cannot be named", async () => {
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(
+      h.resolved,
+      { transport },
+      {
+        repositoryRoot: async () => {
+          throw new Error("no repository here");
+        },
+      },
+    );
+
+    expect(outcome.status).toBe("collected");
+    expect(transport.delivered).toEqual([]);
+    expect(outcome.failures).toEqual([{ stage: "scan", reason: "unreadable-file", count: 1 }]);
+  });
+
+  it("finds the repository it was started in when nothing is injected", async () => {
+    // The default wiring: the root is looked up from the working directory of this test run,
+    // which is not where the fixture's turns ran, so every one of them is out of scope.
+    const h = await harness({ AGENTMETER_SCOPE: "repository" });
+    await twoRepositories(h);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(h.resolved, { transport });
+
+    expect(transport.delivered).toEqual([]);
+    expect(outcome.scan.turnsOutOfScope).toBe(3);
+  });
+
+  it("reports every repository when the scope is the machine", async () => {
+    const h = await harness({ AGENTMETER_SCOPE: "machine" });
+    await twoRepositories(h);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(h.resolved, { transport });
+
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(outcome.scan.turnsOutOfScope).toBe(0);
   });
 });

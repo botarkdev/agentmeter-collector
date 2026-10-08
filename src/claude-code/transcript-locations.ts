@@ -5,11 +5,11 @@ import { join } from "node:path";
  * Finds Claude Code's session transcripts.
  *
  * Claude Code writes one directory per project path under its transcripts root, plus a directory
- * per git worktree, and one JSONL per session inside. This walks the whole tree rather than
- * matching a configured list of project paths the way the reference implementation does: a
- * configured list is attribution — deciding which repository a session belongs to — and
- * attribution is TASKRAIL.md row T013. Here, every transcript on the machine belongs to the one
- * project the configured ingest token names, and nothing reads a directory name for meaning.
+ * per git worktree, and one JSONL per session inside. This walks the whole tree and lists every
+ * transcript on the machine, and reads no directory name for meaning. Which of them a run
+ * reports is decided afterwards, by the run's scope (`src/scope/turn-scope.ts`): the listing has
+ * to be complete, because a session opened in a worktree is kept under another directory and
+ * only its turns say which repository it belongs to.
  *
  * Never throws. A missing root yields nothing (a machine with no Claude Code history is a
  * successful, empty run), and an unreadable subdirectory is skipped and counted.

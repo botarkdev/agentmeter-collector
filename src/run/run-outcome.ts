@@ -61,6 +61,9 @@ export interface ScanSummary {
   readonly filesRead: number;
   readonly linesRead: number;
   readonly turnsFound: number;
+  /** Usage turns of other repositories, left out by the run's scope. Always 0 for a run that
+   * reports the whole machine. */
+  readonly turnsOutOfScope: number;
   readonly measurements: number;
   readonly duplicatesCollapsed: number;
 }
@@ -100,6 +103,7 @@ export class RunOutcomeAccumulator {
   filesRead = 0;
   linesRead = 0;
   turnsFound = 0;
+  turnsOutOfScope = 0;
   measurements = 0;
   duplicatesCollapsed = 0;
   batchesSent = 0;
@@ -142,6 +146,7 @@ export class RunOutcomeAccumulator {
         filesRead: this.filesRead,
         linesRead: this.linesRead,
         turnsFound: this.turnsFound,
+        turnsOutOfScope: this.turnsOutOfScope,
         measurements: this.measurements,
         duplicatesCollapsed: this.duplicatesCollapsed,
       },

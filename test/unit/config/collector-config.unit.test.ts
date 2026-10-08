@@ -119,4 +119,24 @@ describe("resolveConfigFromEnv", () => {
       requestTimeoutMs: 300,
     });
   });
+
+  it("reports only the repository it runs in unless told otherwise", () => {
+    const resolved = resolveConfigFromEnv(CONFIGURED, HOME);
+    expect(resolved.status === "configured" && resolved.config.scope).toBe("repository");
+  });
+
+  it("reports the whole machine when asked to", () => {
+    const resolved = resolveConfigFromEnv({ ...CONFIGURED, AGENTMETER_SCOPE: " machine " }, HOME);
+    expect(resolved.status === "configured" && resolved.config.scope).toBe("machine");
+    expect(resolved.failures).toEqual([]);
+  });
+
+  it("falls back to the repository for a scope it does not know, and names the setting", () => {
+    const resolved = resolveConfigFromEnv({ ...CONFIGURED, AGENTMETER_SCOPE: "everything" }, HOME);
+
+    expect(resolved.status === "configured" && resolved.config.scope).toBe("repository");
+    expect(resolved.failures).toEqual([
+      { stage: "config", reason: "invalid-setting", count: 1, detail: "AGENTMETER_SCOPE" },
+    ]);
+  });
 });

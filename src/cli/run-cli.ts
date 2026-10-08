@@ -50,6 +50,9 @@ export function summarise(outcome: RunOutcome): string {
     `rejected ${outcome.delivery.rejected}`,
     `queued ${outcome.queue.remaining}`,
   ];
+  if (outcome.scan.turnsOutOfScope > 0) {
+    parts.push(`out-of-scope ${outcome.scan.turnsOutOfScope}`);
+  }
   if (outcome.queue.discarded > 0) {
     parts.push(`discarded ${outcome.queue.discarded}`);
   }

@@ -12,6 +12,7 @@ describe("RunOutcomeAccumulator", () => {
         filesRead: 0,
         linesRead: 0,
         turnsFound: 0,
+        turnsOutOfScope: 0,
         measurements: 0,
         duplicatesCollapsed: 0,
       },
@@ -78,6 +79,7 @@ describe("RunOutcomeAccumulator", () => {
     accumulator.filesRead = 8;
     accumulator.linesRead = 7;
     accumulator.turnsFound = 6;
+    accumulator.turnsOutOfScope = 3;
     accumulator.measurements = 5;
     accumulator.duplicatesCollapsed = 4;
     accumulator.batchesSent = 3;
@@ -94,6 +96,7 @@ describe("RunOutcomeAccumulator", () => {
       filesRead: 8,
       linesRead: 7,
       turnsFound: 6,
+      turnsOutOfScope: 3,
       measurements: 5,
       duplicatesCollapsed: 4,
     });

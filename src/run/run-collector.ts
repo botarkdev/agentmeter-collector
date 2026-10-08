@@ -7,6 +7,9 @@ import { readCursor, writeCursor } from "../cursor/scan-cursor.js";
 import { cursorPath, queueDirectory } from "../queue/queue-paths.js";
 import type { BatchQueue } from "../queue/batch-queue.js";
 import { FileBatchQueue } from "../queue/batch-queue.js";
+import { findRepositoryRoot } from "../scope/repository-root.js";
+import type { TurnScope } from "../scope/turn-scope.js";
+import { repositoryCacheDirectory, repositoryScope } from "../scope/turn-scope.js";
 import type { FetchLike, IngestTransport } from "../transport/ingest-transport.js";
 import { HttpIngestTransport } from "../transport/ingest-transport.js";
 import { collectMeasurements } from "./collect.js";
@@ -36,10 +39,28 @@ export interface RunDependencies {
   readonly writeCursorFile: typeof writeCursor;
 }
 
-export function defaultDependencies(config: CollectorConfig): RunDependencies {
+/**
+ * What a run needs to know before it can build the rest: which repository it belongs to. Asked
+ * only when the configured scope is `repository`. Separate from `RunDependencies` because the
+ * queue's location depends on the answer.
+ */
+export interface ScopeDependencies {
+  /** The root of the repository the run was started in. Must not reject. */
+  readonly repositoryRoot: () => Promise<string>;
+}
+
+export const defaultScopeDependencies: ScopeDependencies = {
+  repositoryRoot: () => findRepositoryRoot(process.cwd()),
+};
+
+/**
+ * `cacheDir` is where THIS run keeps its queue and cursor — the configured directory for a run
+ * that reports the whole machine, a directory of its own under it for a repository.
+ */
+export function defaultDependencies(config: CollectorConfig, cacheDir: string): RunDependencies {
   return {
     now: () => Date.now(),
-    queue: new FileBatchQueue(queueDirectory(config.cacheDir)),
+    queue: new FileBatchQueue(queueDirectory(cacheDir)),
     transport: new HttpIngestTransport(
       {
         endpoint: config.endpoint,
@@ -64,6 +85,7 @@ export function defaultDependencies(config: CollectorConfig): RunDependencies {
 export async function runCollector(
   resolved: ResolvedConfig,
   overrides: Partial<RunDependencies> = {},
+  scopeDeps: ScopeDependencies = defaultScopeDependencies,
 ): Promise<RunOutcome> {
   const outcome = new RunOutcomeAccumulator();
   for (const failure of resolved.failures) {
@@ -77,12 +99,29 @@ export async function runCollector(
   }
 
   const config = resolved.config;
-  const deps: RunDependencies = { ...defaultDependencies(config), ...overrides };
-  const startedAt = deps.now();
+  const now = overrides.now ?? (() => Date.now());
+  const startedAt = now();
+
+  let scope: TurnScope | undefined;
+  let cacheDir = config.cacheDir;
+  let deps: RunDependencies;
+  try {
+    if (config.scope === "repository") {
+      const root = await scopeDeps.repositoryRoot();
+      scope = repositoryScope(root, config.transcriptsDir);
+      cacheDir = repositoryCacheDirectory(config.cacheDir, root);
+    }
+    deps = { ...defaultDependencies(config, cacheDir), ...overrides };
+  } catch {
+    // The repository could not be named, so nothing can be said to belong to it. Reporting the
+    // whole machine instead would be the one outcome the scope exists to prevent.
+    outcome.fail("scan", "unreadable-file");
+    return outcome.build("collected", now() - startedAt, false);
+  }
   const expired = (): boolean => deps.now() - startedAt >= config.runBudgetMs;
 
   try {
-    await collectAndEnqueue(config, outcome, deps, expired);
+    await collectAndEnqueue(config, cacheDir, scope, outcome, deps, expired);
     await drain(config, outcome, deps, expired);
   } catch {
     // Structurally unreachable — every stage above is total. Kept because FR-015 is a promise
@@ -97,6 +136,8 @@ export async function runCollector(
 
 async function collectAndEnqueue(
   config: CollectorConfig,
+  cacheDir: string,
+  scope: TurnScope | undefined,
   outcome: RunOutcomeAccumulator,
   deps: RunDependencies,
   expired: () => boolean,
@@ -106,13 +147,14 @@ async function collectAndEnqueue(
     outcome.fail("scan", "unreadable-file");
   }
 
-  const cursor = await deps.readCursorFile(cursorPath(config.cacheDir));
+  const cursor = await deps.readCursorFile(cursorPath(cacheDir));
   const { entries, nextCursor } = await collectMeasurements(
     discovery.files,
     cursor,
     config.pricingTier,
     outcome,
     { statFile: deps.statFile, readLines: deps.readLines, expired },
+    scope,
   );
 
   if (entries.length > 0) {
@@ -134,7 +176,7 @@ async function collectAndEnqueue(
   // the cursor says the lines were read. A crash between the two costs a redundant send that the
   // ledger absorbs, never a lost measurement.
   const written = await deps.writeCursorFile(
-    cursorPath(config.cacheDir),
+    cursorPath(cacheDir),
     nextCursor,
     new Set(discovery.files),
   );
