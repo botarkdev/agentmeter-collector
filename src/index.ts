@@ -16,10 +16,14 @@
  */
 
 export { runCollector } from "./run/run-collector.js";
-export type { RunDependencies } from "./run/run-collector.js";
+export type { RunDependencies, ScopeDependencies } from "./run/run-collector.js";
 
 export { resolveConfigFromEnv } from "./config/collector-config.js";
-export type { CollectorConfig, ResolvedConfig } from "./config/collector-config.js";
+export type {
+  CollectionScope,
+  CollectorConfig,
+  ResolvedConfig,
+} from "./config/collector-config.js";
 
 export { runCli, summarise } from "./cli/run-cli.js";
 export type { CliIo } from "./cli/run-cli.js";

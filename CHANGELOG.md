@@ -11,6 +11,15 @@ they were written there, and the pull request numbers in them are that repositor
 
 ## [Unreleased]
 
+### Changed
+
+- **A run reports only the repository it was started in.** It used to report every transcript on
+  the machine under whichever token ran the hook. `AGENTMETER_SCOPE=machine` restores that. The
+  queue and the scan cursor are now kept per repository, so anything retained under the old,
+  shared cache directory is no longer delivered by a repository-scoped run; the service
+  deduplicates whatever is re-read.
+- The run outcome carries `scan.turnsOutOfScope`.
+
 ## 0.1.1 — 2026-10-04
 
 ### Fixed

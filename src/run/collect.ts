@@ -3,6 +3,7 @@ import type { MeasurementEntry } from "../contract/ingest-contract.js";
 import { measurementTotal, projectMeasurement } from "../contract/measurement-projection.js";
 import type { CursorEntry, ScanCursor } from "../cursor/scan-cursor.js";
 import { resumeOffset } from "../cursor/scan-cursor.js";
+import type { TurnScope } from "../scope/turn-scope.js";
 import type { RunOutcomeAccumulator } from "./run-outcome.js";
 
 /**
@@ -47,6 +48,8 @@ export async function collectMeasurements(
   pricingTier: string,
   outcome: RunOutcomeAccumulator,
   deps: CollectDependencies,
+  /** Absent: every turn on the machine is reported. */
+  scope?: TurnScope,
 ): Promise<CollectResult> {
   const byKey = new Map<string, MeasurementEntry>();
   const nextFiles: Record<string, CursorEntry> = { ...cursor.files };
@@ -71,11 +74,23 @@ export async function collectMeasurements(
       continue;
     }
 
+    // A transcript the scope claims whole is not asked about turn by turn. Every other one is
+    // still READ — only a turn's own working directory says whether it belongs — and its offset
+    // is recorded like any other's, so it is not read again.
+    const accepts =
+      scope === undefined || scope.acceptsTranscript(path)
+        ? undefined
+        : scope.acceptsWorkingDirectory;
+
     let read: TranscriptReadResult;
     try {
       read = await deps.readLines(path, from, (parsed) => {
-        const result = extractUsageTurn(parsed);
+        const result = extractUsageTurn(parsed, accepts);
         if (result.kind === "ignored") {
+          return;
+        }
+        if (result.kind === "out-of-scope") {
+          outcome.turnsOutOfScope += 1;
           return;
         }
         if (result.kind === "skipped") {

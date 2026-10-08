@@ -34,7 +34,9 @@ refactor; say so and stop.
    the git branch is transmitted. This is enforced by an allowlist projection
    (`src/contract/measurement-projection.ts`) and by a test that fails when it stops holding
    (`test/unit/contract/content-safety.unit.test.ts`), never by a promise in a comment. A new field
-   on the wire is a decision for the owner, not an implementation detail.
+   on the wire is a decision for the owner, not an implementation detail. Reading a path to
+   decide which turns to report is allowed and is what the scope does; carrying one anywhere past
+   `src/claude-code/usage-extraction.ts` is not.
 3. **It has zero runtime dependencies.** `package.json` has no `dependencies` and gains none: a
    hook that runs at the end of every session must install nothing and audit to nothing. Node's
    built-ins only. Development dependencies are pinned to exact versions.
@@ -48,6 +50,9 @@ refactor; say so and stop.
 
 - [`README.md`](README.md) — what a user of the collector needs: configuration, what it writes to
   disk, the public surface.
+- [`specs/repository-scope/decision.md`](specs/repository-scope/decision.md) — why a run reports
+  only the repository it was started in, how it decides which turns those are, and why the queue
+  and the cursor are per repository. It reverses one decision of the record below.
 - [`specs/0019-claude-code-collector/`](specs/0019-claude-code-collector/) — the design record:
   the spec, the research decisions, and the two contracts (`contracts/ingest-submission.md`,
   `contracts/run-outcome.md`). Read `research.md` before changing how scanning, queueing or
@@ -70,7 +75,8 @@ only.
 | --- | --- |
 | `src/claude-code/` | The Claude Code adapter: finding transcripts, reading them, extracting usage. The only part that knows a transcript's format. |
 | `src/contract/` | The wire shape and the allowlist projection that builds it. |
-| `src/queue/`, `src/cursor/` | The on-disk queue of undelivered batches and the scan cursor. Both are disposable by design. |
+| `src/scope/` | Which repository a run belongs to, and which turns belong to that repository. Reads paths to decide; sends none. |
+| `src/queue/`, `src/cursor/` | The on-disk queue of undelivered batches and the scan cursor, one of each per repository. Both are disposable by design. |
 | `src/transport/` | The one HTTP call. |
 | `src/run/` | One run, end to end, and its outcome. |
 | `src/config/` | Configuration from the environment. |
@@ -106,8 +112,7 @@ permission and no schedule; keep it that way.
 
 **Not here yet**: the package is `private` and its `main` points at TypeScript source, so it can
 only be used from a clone. Publishing it, with a built entry point, is the next piece of work. So
-are a repository-level configuration with attribution rules, privacy controls, and a second agent
-adapter. There is no backlog file in this repository yet.
+are attribution rules a repository declares, privacy controls, and a second agent adapter. There is no backlog file in this repository yet.
 
 **The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
 carried in the service's repository: it grants nobody permission to use it. That is at odds with

@@ -207,3 +207,51 @@ describe("totalTokens", () => {
     ).toBe(31);
   });
 });
+describe("extractUsageTurn: with a scope", () => {
+  const inside = (directory: string | undefined): boolean => directory === "/work/acme/widgets";
+
+  it("hands the turn's working directory to the scope and keeps a turn it accepts", () => {
+    const seen: (string | undefined)[] = [];
+    const result = extractUsageTurn(assistantTurn({ cwd: "/work/acme/widgets" }), (directory) => {
+      seen.push(directory);
+      return inside(directory);
+    });
+
+    expect(seen).toEqual(["/work/acme/widgets"]);
+    expect(result.kind).toBe("turn");
+  });
+
+  it("carries nothing of the working directory in the turn it returns", () => {
+    const result = extractUsageTurn(assistantTurn({ cwd: "/work/acme/widgets" }), inside);
+
+    expect(JSON.stringify(result)).not.toContain("widgets");
+  });
+
+  it("reports a turn the scope rejects as out of scope, not as a skip", () => {
+    expect(extractUsageTurn(assistantTurn({ cwd: "/work/acme/gadgets" }), inside)).toEqual({
+      kind: "out-of-scope",
+    });
+  });
+
+  it("asks the scope with no directory when the turn records none", () => {
+    expect(extractUsageTurn(assistantTurn(), inside)).toEqual({ kind: "out-of-scope" });
+  });
+
+  it("does not report another repository's malformed turn as this run's skip", () => {
+    const malformed = assistantTurn({ cwd: "/work/acme/gadgets", model: null });
+
+    expect(extractUsageTurn(malformed, inside)).toEqual({ kind: "out-of-scope" });
+    expect(extractUsageTurn(malformed)).toEqual({ kind: "skipped", reason: "missing-model" });
+  });
+
+  it("does not ask the scope about a line that is not usage at all", () => {
+    let asked = 0;
+    const result = extractUsageTurn({ type: "user", cwd: "/work/acme/gadgets" }, () => {
+      asked += 1;
+      return false;
+    });
+
+    expect(result).toEqual({ kind: "ignored" });
+    expect(asked).toBe(0);
+  });
+});

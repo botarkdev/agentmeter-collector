@@ -16,6 +16,7 @@ const BASE: RunOutcome = {
     filesRead: 1,
     linesRead: 10,
     turnsFound: 4,
+    turnsOutOfScope: 0,
     measurements: 3,
     duplicatesCollapsed: 1,
   },
@@ -103,6 +104,13 @@ describe("summarise", () => {
 
   it("says when the run ran out of time, because the counts alone cannot", () => {
     expect(summarise({ ...BASE, budgetExhausted: true })).toContain("budget-exhausted");
+  });
+
+  it("says how many turns the scope left out, and nothing when it left out none", () => {
+    expect(summarise(BASE)).not.toContain("out-of-scope");
+    expect(summarise({ ...BASE, scan: { ...BASE.scan, turnsOutOfScope: 12 } })).toContain(
+      "out-of-scope 12",
+    );
   });
 
   it("names every skip reason and every failure, so nothing is invisible", () => {
