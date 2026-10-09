@@ -239,3 +239,66 @@ Above `CLIENT_ACTIONS`:
 - `git status` clean of anything under `src/` afterwards, and `git diff` of
   `src/contract/ingest-contract.ts` showing comment lines only.
 - `pnpm check:package` (part of the `test` stage) still reporting the same packed files.
+
+## Decisions taken
+
+Answered at the scope gate
+(`docs/autopilot/decisions/C005-check-the-collector-s-contract-against-t.md`):
+
+1. `version` and `sha256` bind; the source is named by repository, path and "added by T153";
+   `source.commit` is `null` until the commit exists on the service's `main`.
+2. The test holds the copy to the recorded SHA-256.
+3. The request as the transport sends it is asserted.
+4. The refresh procedure is in `CLAUDE.md` and in the test's header; no README beside the copy.
+5. The document is published byte for byte, its `description` included.
+6. The two comment blocks are repointed as worded above; the other two outside references in
+   that file are left.
+
+## Results
+
+Applied as approved, on 2026-10-09 (UTC). The change set did not grow.
+
+- **The copy**: `sha256sum test/fixtures/collector-ingest.contract.json` prints
+  `4cf2bfb6bb0b925b92cdc7c24cf5107eaf0f67e2cfb9653886eae0548479489d`, and `cmp` against the bytes
+  of the service's branch exits 0.
+- **The test**: 24 tests in `test/unit/contract/service-contract.unit.test.ts`, all passing
+  against the collector as it is. **The collector does not depart from the document anywhere**;
+  nothing under `src/` needed more than the comments.
+- **Seen failing first**: 24 deliberate changes, one at a time, each restored with
+  `git checkout -- src test` before the next. Every one of the 24 tests failed under at least one
+  of them (of the three "is not an integer" cases, which share one line of the collector, the
+  `rejected` one was provoked).
+
+  | Deliberate change | Tests that failed |
+  | --- | --- |
+  | Projection writes `messageKey` instead of `idempotencyKey` | both key-set tests, both value tests, the request test |
+  | `cacheRead` removed from `TOKEN_FIELDS` and the projection | token fields, both key-set tests, both value tests, the request test |
+  | `dimensions` added to `MEASUREMENT_ENTRY_FIELDS` alone | measurement fields |
+  | Batch built with `entries` instead of `measurements` | batch fields |
+  | `CLAUDE_CODE_AGENT` changed | batch fields (the agent) |
+  | `INGEST_PATH` changed | path, the request test |
+  | Method `PUT` | the request test |
+  | Header `x-content-type` | the request test |
+  | Scheme `Token` instead of `Bearer` | the request test |
+  | `rejected` read from another field of the answer | accepted counts, delivered under the pinned status |
+  | `rejected` no longer required to be an integer | "not an integer" for `rejected` |
+  | Accepted status `201` | delivered under the pinned status |
+  | `FIX_AND_RETRY` removed from `CLIENT_ACTIONS` | actions |
+  | Refusal `code` read from another field | refusal body fields, `invalidRequest` |
+  | `401` discarded | `unauthenticated` |
+  | `429` wait read from another header | `rateLimited` |
+  | `429` no longer stops the run | `rateLimited` |
+  | `FIX_AND_RETRY` retained | `invalidRequest` |
+  | Copy: one value edited, record untouched | the SHA-256 test |
+  | Copy: `cacheRead` renamed, SHA-256 updated to match | token fields, both key-set tests, both value tests, the request test |
+  | Copy: a refusal case added, SHA-256 updated | "an expectation for every refusal", the new case |
+  | Copy: the session id removed from its example, SHA-256 updated | "every optional field and one with none" |
+  | Record: wrong `version` | contract and version |
+  | Record: a seven-character `source.commit` | source commit |
+
+- **Checks**: `taskrail checks C005 --stage implement` — `passed test`, `passed lint`. 18 test
+  files, 269 tests; coverage 98.67% statements, 98.34% branches, 98.71% functions, 98.84% lines;
+  `check-package: ok — agentmeter-collector-0.2.0.tgz, 39 files`; "All matched files use Prettier
+  code style!"; `tsc --noEmit` silent.
+- **`src/`**: `git diff` of `src/contract/ingest-contract.ts` against the base shows comment
+  lines only (13 added, 8 removed, in two blocks).
