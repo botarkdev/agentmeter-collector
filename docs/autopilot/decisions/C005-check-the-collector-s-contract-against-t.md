@@ -41,3 +41,20 @@ the copy and its record. The collector departs from the document nowhere.
 | # | Question | Options | Decision | Reason |
 |---|---|---|---|---|
 | 1 | Is the implement stage approved? | approve · amend | **approve** | The collector is held to the copy, the copy to its recorded hash, and nothing that ships changed: the package is the same 39 files. |
+
+## close
+
+Reviewed: the range `cf3f206..16a5237` — the three approved edits of `CLAUDE.md` (rule 4, the
+layout row, the refresh procedure), a note in the artifact, and the status change committed on its
+own (`16a5237`). Re-run by the orchestrator: `taskrail checks C005` — `test` and `lint` passed;
+`taskrail validate` — 0 errors. The branch has no upstream. `taskrail review` reported no rebase
+needed onto C001's branch.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Is the close approved? | approve · hold | **approve** | The collector is held to the service's pinned document by a test seen failing on every departure tried. |
+| 2 | Which pull request title? | the generated one · `test(C005:contract): hold the collector to a copy of the service's pinned contract document` | **the lane's** | It releases nothing: a fixture, a test, comments and documentation. |
+| 3 | When is the branch published? | after C001's pull request is merged · now | **after C001's** | One branch is in review at a time; it then rebases onto `main`. |
+
+For the owner: `source.commit` in the provenance record is `null` until the service's task T153 is
+on its `main`; filling it is a one-line edit that changes neither the copy nor its hash.
