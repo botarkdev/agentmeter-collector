@@ -1,4 +1,5 @@
 import { stat } from "node:fs/promises";
+import { buildAttributor, guardedMatch, loadAttributionRules, } from "../attribution/attribution-rules.js";
 import { listTranscriptFiles } from "../claude-code/transcript-locations.js";
 import { readTranscriptLines } from "../claude-code/transcript-reader.js";
 import { CLAUDE_CODE_AGENT, splitIntoBatches } from "../contract/ingest-contract.js";
@@ -37,7 +38,35 @@ export function defaultDependencies(config, cacheDir) {
         readLines: readTranscriptLines,
         readCursorFile: readCursor,
         writeCursorFile: writeCursor,
+        loadRules: (repositoryRoot) => loadAttributionRules(repositoryRoot),
+        matchRule: guardedMatch,
     };
+}
+/**
+ * The repository's attribution rules, ready to use, or nothing.
+ *
+ * Whatever goes wrong here costs the run its dimensions and nothing else: the measurements are
+ * still collected and submitted, and the outcome says what happened. Token counts cannot be
+ * recovered once a transcript has rotated off disk; a label can be applied again.
+ */
+async function prepareAttribution(repositoryRoot, config, outcome, deps) {
+    let loaded;
+    try {
+        loaded = await deps.loadRules(repositoryRoot);
+    }
+    catch {
+        loaded = { kind: "failed", reason: "unreadable-rules" };
+    }
+    if (loaded.kind === "none") {
+        return undefined;
+    }
+    if (loaded.kind === "failed") {
+        outcome.fail("attribution", loaded.reason, loaded.detail);
+        return undefined;
+    }
+    return buildAttributor(loaded.rules, config.sourceName === undefined
+        ? { matcher: deps.matchRule }
+        : { source: config.sourceName, matcher: deps.matchRule });
 }
 export async function runCollector(resolved, overrides = {}, scopeDeps = defaultScopeDependencies) {
     const outcome = new RunOutcomeAccumulator();
@@ -53,11 +82,13 @@ export async function runCollector(resolved, overrides = {}, scopeDeps = default
     const now = overrides.now ?? (() => Date.now());
     const startedAt = now();
     let scope;
+    let repositoryRoot;
     let cacheDir = config.cacheDir;
     let deps;
     try {
         if (config.scope === "repository") {
             const root = await scopeDeps.repositoryRoot();
+            repositoryRoot = root;
             scope = repositoryScope(root, config.transcriptsDir);
             cacheDir = repositoryCacheDirectory(config.cacheDir, root);
         }
@@ -71,7 +102,16 @@ export async function runCollector(resolved, overrides = {}, scopeDeps = default
     }
     const expired = () => deps.now() - startedAt >= config.runBudgetMs;
     try {
-        await collectAndEnqueue(config, cacheDir, scope, outcome, deps, expired);
+        // A run that reports the whole machine reads no rule file and attributes nothing: one
+        // repository's rules must not label another repository's turns.
+        const attribution = repositoryRoot === undefined
+            ? undefined
+            : await prepareAttribution(repositoryRoot, config, outcome, deps);
+        await collectAndEnqueue(config, cacheDir, scope, attribution?.attribute, outcome, deps, expired);
+        if (attribution?.timedOut() === true) {
+            // Once, however many turns it cost: the rules were switched off at the first one.
+            outcome.fail("attribution", "rule-timeout");
+        }
         await drain(config, outcome, deps, expired);
     }
     catch {
@@ -83,13 +123,13 @@ export async function runCollector(resolved, overrides = {}, scopeDeps = default
     outcome.remaining = await countRemaining(deps.queue);
     return outcome.build("collected", deps.now() - startedAt, expired());
 }
-async function collectAndEnqueue(config, cacheDir, scope, outcome, deps, expired) {
+async function collectAndEnqueue(config, cacheDir, scope, attribute, outcome, deps, expired) {
     const discovery = await deps.listFiles(config.transcriptsDir);
     for (let index = 0; index < discovery.unreadableDirectories; index += 1) {
         outcome.fail("scan", "unreadable-file");
     }
     const cursor = await deps.readCursorFile(cursorPath(cacheDir));
-    const { entries, nextCursor } = await collectMeasurements(discovery.files, cursor, config.pricingTier, outcome, { statFile: deps.statFile, readLines: deps.readLines, expired }, scope);
+    const { entries, nextCursor } = await collectMeasurements(discovery.files, cursor, config.pricingTier, outcome, { statFile: deps.statFile, readLines: deps.readLines, expired }, scope, attribute);
     if (entries.length > 0) {
         const batches = splitIntoBatches(CLAUDE_CODE_AGENT, entries, config.maxBatchSize);
         const result = await deps.queue.enqueue(batches, config.maxQueuedBatches);

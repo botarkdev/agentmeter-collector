@@ -13,17 +13,19 @@
 /** Why a turn that looked like usage was not submitted. Closed set; each is counted, never
  * silently dropped (spec.md US4 acceptance 4). */
 export type SkipReason = "unparsable-line" | "missing-key" | "missing-timestamp" | "missing-model" | "invalid-token-counts" | "zero-token-turn";
-export type FailureStage = "config" | "scan" | "queue" | "cursor" | "transport";
+/** `attribution` is the repository's rule file: reading it, validating it, matching with it. */
+export type FailureStage = "config" | "attribution" | "scan" | "queue" | "cursor" | "transport";
 /** Why something did not work. Closed set, for the same reason `SkipReason` is. */
-export type FailureReason = "invalid-setting" | "unreadable-file" | "unwritable-queue" | "queue-item-unreadable" | "unwritable-cursor" | "unreachable" | "timeout" | "server-error" | "unrecognised-response" | "rejected-permanently" | "reauthentication-required" | "rate-limited";
+export type FailureReason = "invalid-setting" | "invalid-rules" | "unreadable-rules" | "rule-timeout" | "unreadable-file" | "unwritable-queue" | "queue-item-unreadable" | "unwritable-cursor" | "unreachable" | "timeout" | "server-error" | "unrecognised-response" | "rejected-permanently" | "reauthentication-required" | "rate-limited";
 export interface SkipRecord {
     readonly reason: SkipReason;
     readonly count: number;
 }
 /**
  * `detail` carries a code the SERVICE supplied (an error `code` from the documented error
- * contract, or a stated wait in seconds) or the name of a setting — never a path, a URL, a token,
- * or anything read from a transcript. Identical records merge and carry a count, so a directory
+ * contract, or a stated wait in seconds), the name of a setting, or the code of the check a rule
+ * file failed — never a path, a URL, a token, a branch, a pattern, a dimension, or anything read
+ * from a transcript. Identical records merge and carry a count, so a directory
  * of a thousand unreadable files produces one record rather than a thousand.
  */
 export interface FailureRecord {
@@ -40,6 +42,9 @@ export interface ScanSummary {
     /** Usage turns of other repositories, left out by the run's scope. Always 0 for a run that
      * reports the whole machine. */
     readonly turnsOutOfScope: number;
+    /** Measurements that carry at least one dimension. Always 0 for a repository that declares no
+     * attribution rules. A count: what the dimensions say is not reported here. */
+    readonly turnsAttributed: number;
     readonly measurements: number;
     readonly duplicatesCollapsed: number;
 }
@@ -76,6 +81,7 @@ export declare class RunOutcomeAccumulator {
     linesRead: number;
     turnsFound: number;
     turnsOutOfScope: number;
+    turnsAttributed: number;
     measurements: number;
     duplicatesCollapsed: number;
     batchesSent: number;

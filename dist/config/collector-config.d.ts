@@ -16,6 +16,10 @@ export interface CollectorConfig {
     /** `repository`: only the repository the run was started in. `machine`: every transcript under
      * `transcriptsDir` (specs/repository-scope/decision.md). */
     readonly scope: CollectionScope;
+    /** A name the user declared for where these metrics come from (`AGENTMETER_SOURCE`). Absent
+     * when none is declared. It reaches the wire only through a `source` rule of the repository's
+     * committed attribution file, never by itself (specs/attribution-rules/decision.md). */
+    readonly sourceName?: string;
     readonly cacheDir: string;
     readonly maxBatchSize: number;
     readonly maxQueuedBatches: number;
@@ -37,6 +41,8 @@ export declare const DEFAULT_MAX_BATCH_SIZE = 200;
 export declare const DEFAULT_MAX_QUEUED_BATCHES = 512;
 export declare const DEFAULT_RUN_BUDGET_MS = 5000;
 export declare const DEFAULT_REQUEST_TIMEOUT_MS = 2000;
+/** The longest declared source name that is taken. */
+export declare const MAX_SOURCE_NAME_LENGTH = 255;
 /** Where Claude Code writes its session transcripts, relative to a home directory. */
 export declare const CLAUDE_TRANSCRIPTS_SUBPATH: readonly [".claude", "projects"];
 interface EnvLike {

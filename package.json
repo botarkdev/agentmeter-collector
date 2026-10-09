@@ -1,7 +1,9 @@
 {
   "name": "@agentmeter/collector",
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "description": "Reads a coding agent's local usage logs and reports token counts to agentmeter, without ever blocking or failing the session that produced them.",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -23,6 +25,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ]
 }

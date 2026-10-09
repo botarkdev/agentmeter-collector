@@ -3,7 +3,9 @@ import { measurementTotal, projectMeasurement } from "../contract/measurement-pr
 import { resumeOffset } from "../cursor/scan-cursor.js";
 export async function collectMeasurements(files, cursor, pricingTier, outcome, deps, 
 /** Absent: every turn on the machine is reported. */
-scope) {
+scope, 
+/** Absent: the run has no attribution rules, and no measurement carries a dimension. */
+attribute) {
     const byKey = new Map();
     const nextFiles = { ...cursor.files };
     outcome.filesConsidered += files.length;
@@ -32,7 +34,7 @@ scope) {
         let read;
         try {
             read = await deps.readLines(path, from, (parsed) => {
-                const result = extractUsageTurn(parsed, accepts);
+                const result = extractUsageTurn(parsed, accepts, attribute);
                 if (result.kind === "ignored") {
                     return;
                 }
@@ -78,5 +80,6 @@ scope) {
     }
     const entries = [...byKey.values()];
     outcome.measurements += entries.length;
+    outcome.turnsAttributed += entries.filter((entry) => entry.dimensions !== undefined).length;
     return { entries, nextCursor: { version: 1, files: nextFiles } };
 }

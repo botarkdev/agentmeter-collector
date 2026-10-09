@@ -20,7 +20,7 @@ export declare const USAGE = "usage: agentmeter push";
 export declare function runCli(argv: readonly string[], io: CliIo): Promise<number>;
 /**
  * One line, built only from counts and closed-vocabulary codes. Nothing here interpolates a path,
- * a URL, a token, or anything read out of a transcript — a summary printed into a developer's
+ * a URL, a token, a dimension, or anything read out of a transcript — a summary printed into a developer's
  * terminal is as public as anything this package produces (spec.md FR-025, FR-027).
  */
 export declare function summarise(outcome: RunOutcome): string;

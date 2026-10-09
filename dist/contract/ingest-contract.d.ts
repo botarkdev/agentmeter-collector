@@ -2,12 +2,16 @@
  * The service's ingestion contract, as this collector consumes it
  * (specs/0019-claude-code-collector/contracts/ingest-submission.md).
  *
- * The authority is the deployed endpoint — `apps/api/src/routes/ingest.route.ts` and
- * `apps/api/src/dto/ingest-request.schema.ts`. Nothing here changes it, and nothing here
- * re-validates it: the Constitution requires a schema shared between the API and the collector to
- * live in a shared package rather than be duplicated, so this package defines no second copy of
- * that schema. What it defines is the TypeScript shape of the payload its allowlist projection
- * builds, and the service remains the authority that validates (research.md Decision 10).
+ * The authority is the deployed endpoint. What this collector relies on of it is pinned by the
+ * service in one document, `apps/api/contracts/collector-ingest.json` of its repository
+ * (`botarkdev/agentmeter`, private). A copy is held here as
+ * `test/fixtures/collector-ingest.contract.json`, and
+ * `test/unit/contract/service-contract.unit.test.ts` fails when this collector departs from it.
+ * Nothing here changes the contract, and nothing here re-validates it: a rule of the service's
+ * repository requires a schema shared between the API and the collector to live in a shared
+ * package rather than be duplicated, so this package defines no second copy of that schema. What
+ * it defines is the TypeScript shape of the payload its allowlist projection builds, and the
+ * service remains the authority that validates (research.md Decision 10).
  */
 export declare const CLAUDE_CODE_AGENT = "claude-code";
 /** Every HTTP API is served under `/api/v1` (Constitution, API Design & Documentation). */
@@ -20,10 +24,21 @@ export interface WireTokenCounts {
     readonly cacheRead: number;
 }
 /**
+ * One attribution dimension on the wire: what a measurement is charged to. Both strings are the
+ * reporting repository's: `type` is a word of its committed rule file, `key` is what one of that
+ * file's rules built (specs/attribution-rules/decision.md). The service stores them and knows no
+ * vocabulary. `weight` and `confidence`, which the endpoint also defines, are never sent.
+ */
+export interface WireDimension {
+    readonly type: string;
+    readonly key: string;
+}
+/**
  * One measurement on the wire. This is the COMPLETE set of fields this collector ever sends:
- * no `payload`, no `dimensions` (attribution is TASKRAIL.md row T013, and deriving one here would
- * mean reading the very fields FR-025 keeps off the wire), and no project or user identity —
- * both are the service's to derive from the token, and no request field can influence either.
+ * no `payload`, and no project or user identity — both are the service's to derive from the
+ * token, and no request field can influence either. `dimensions` is present only for a
+ * repository that committed attribution rules, on a turn one of them matched; otherwise the key
+ * is absent, never empty.
  */
 export interface MeasurementEntry {
     readonly idempotencyKey: string;
@@ -32,6 +47,7 @@ export interface MeasurementEntry {
     readonly model: string;
     readonly pricingTier: string;
     readonly tokens: WireTokenCounts;
+    readonly dimensions?: readonly WireDimension[];
 }
 export interface IngestBatch {
     readonly agent: string;
@@ -68,8 +84,9 @@ export declare function splitIntoBatches(agent: string, measurements: readonly M
  * the batch (FR-020). */
 export declare function readAcceptance(body: unknown): IngestAcceptance | undefined;
 /** The closed set of values the service's error contract uses for "what should the client do
- * next" (`apps/api/src/errors/client-action.ts`). Read to decide whether a batch is retained or
- * discarded (FR-021). */
+ * next" (`refused.actions` in the service's pinned document, which the service compares with its
+ * own list exactly: a value outside this list is read here as no action at all). Read to decide
+ * whether a batch is retained or discarded (FR-021). */
 export declare const CLIENT_ACTIONS: readonly ["RETRY", "DO_NOT_RETRY", "FIX_AND_RETRY", "REAUTHENTICATE"];
 export type ClientAction = (typeof CLIENT_ACTIONS)[number];
 export interface ServiceError {

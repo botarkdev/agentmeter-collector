@@ -1,3 +1,4 @@
+import type { LoadedRules, RuleMatcher } from "../attribution/attribution-rules.js";
 import { listTranscriptFiles } from "../claude-code/transcript-locations.js";
 import { readTranscriptLines } from "../claude-code/transcript-reader.js";
 import type { CollectorConfig, ResolvedConfig } from "../config/collector-config.js";
@@ -28,6 +29,11 @@ export interface RunDependencies {
     readonly readLines: typeof readTranscriptLines;
     readonly readCursorFile: typeof readCursor;
     readonly writeCursorFile: typeof writeCursor;
+    /** The attribution rules of the repository at this root. Asked once, and only by a run that
+     * reports one repository. Must not reject; a run survives it if it does. */
+    readonly loadRules: (repositoryRoot: string) => Promise<LoadedRules>;
+    /** One bounded match of a committed pattern. */
+    readonly matchRule: RuleMatcher;
 }
 /**
  * What a run needs to know before it can build the rest: which repository it belongs to. Asked

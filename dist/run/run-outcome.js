@@ -22,6 +22,7 @@ export class RunOutcomeAccumulator {
     linesRead = 0;
     turnsFound = 0;
     turnsOutOfScope = 0;
+    turnsAttributed = 0;
     measurements = 0;
     duplicatesCollapsed = 0;
     batchesSent = 0;
@@ -60,6 +61,7 @@ export class RunOutcomeAccumulator {
                 linesRead: this.linesRead,
                 turnsFound: this.turnsFound,
                 turnsOutOfScope: this.turnsOutOfScope,
+                turnsAttributed: this.turnsAttributed,
                 measurements: this.measurements,
                 duplicatesCollapsed: this.duplicatesCollapsed,
             },

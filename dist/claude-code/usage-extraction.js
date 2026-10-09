@@ -67,6 +67,20 @@ export function totalTokens(tokens) {
     return (tokens.input + tokens.output + tokens.cacheWrite5m + tokens.cacheWrite1h + tokens.cacheRead);
 }
 /**
+ * Asks the run's attribution function about one turn. The branch goes in as the single property
+ * of an object built here, and what comes back is copied property by property, so the function
+ * is shown nothing else of the event and can put nothing else on the turn.
+ */
+function dimensionsFor(recordedBranch, attribute) {
+    const branch = nonEmptyString(recordedBranch);
+    const derived = attribute(branch === undefined ? {} : { branch });
+    const dimensions = [];
+    for (const dimension of derived) {
+        dimensions.push({ type: dimension.type, key: dimension.key });
+    }
+    return dimensions;
+}
+/**
  * A parsed transcript line in; a `UsageTurn`, a counted skip, or nothing, out.
  *
  * The key is `message.id` alone (research.md Decision 1). Measured over 60 real transcripts:
@@ -79,8 +93,11 @@ export function totalTokens(tokens) {
  * `accepts`, when given, is asked before anything else is checked: a turn of another repository
  * is none of this run's business, and reporting its missing model as a skip would fill one
  * repository's outcome with another's anomalies.
+ *
+ * `attribute`, when given, is asked last, about a turn that is going to be reported, and is
+ * handed an object built here with the branch as its one property — never the event.
  */
-export function extractUsageTurn(value, accepts) {
+export function extractUsageTurn(value, accepts, attribute) {
     if (!isRecord(value) || value.type !== "assistant") {
         return IGNORED;
     }
@@ -114,8 +131,15 @@ export function extractUsageTurn(value, accepts) {
         return skipped("zero-token-turn");
     }
     const sessionId = nonEmptyString(value.sessionId) ?? nonEmptyString(value.session_id);
-    if (sessionId === undefined) {
-        return { kind: "turn", turn: { messageId, occurredAt, model, tokens } };
+    const dimensions = attribute === undefined ? [] : dimensionsFor(value.gitBranch, attribute);
+    if (dimensions.length === 0) {
+        if (sessionId === undefined) {
+            return { kind: "turn", turn: { messageId, occurredAt, model, tokens } };
+        }
+        return { kind: "turn", turn: { messageId, occurredAt, sessionId, model, tokens } };
     }
-    return { kind: "turn", turn: { messageId, occurredAt, sessionId, model, tokens } };
+    if (sessionId === undefined) {
+        return { kind: "turn", turn: { messageId, occurredAt, model, tokens, dimensions } };
+    }
+    return { kind: "turn", turn: { messageId, occurredAt, sessionId, model, tokens, dimensions } };
 }

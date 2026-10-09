@@ -6,6 +6,8 @@ export const DEFAULT_MAX_BATCH_SIZE = 200;
 export const DEFAULT_MAX_QUEUED_BATCHES = 512;
 export const DEFAULT_RUN_BUDGET_MS = 5_000;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 2_000;
+/** The longest declared source name that is taken. */
+export const MAX_SOURCE_NAME_LENGTH = 255;
 /** Where Claude Code writes its session transcripts, relative to a home directory. */
 export const CLAUDE_TRANSCRIPTS_SUBPATH = [".claude", "projects"];
 function trimmed(value) {
@@ -52,6 +54,29 @@ function collectionScope(raw, failures) {
     });
     return DEFAULT_SCOPE;
 }
+// C0 and C1 control characters, and DEL. A name is one line of text somebody typed.
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f-\u009f]/;
+/**
+ * The declared source name. It is the user's own text and is taken as written, within bounds: a
+ * name that is too long or holds a control character is not truncated or cleaned into a name
+ * nobody chose — it is treated as not set, and reported like any other setting that is not valid.
+ */
+function sourceName(raw, failures) {
+    const value = trimmed(raw);
+    if (value === undefined) {
+        return undefined;
+    }
+    if (value.length > MAX_SOURCE_NAME_LENGTH || CONTROL_CHARACTER.test(value)) {
+        failures.push({
+            stage: "config",
+            reason: "invalid-setting",
+            count: 1,
+            detail: "AGENTMETER_SOURCE",
+        });
+        return undefined;
+    }
+    return value;
+}
 /**
  * Reads the collector's configuration out of the environment. Never throws.
  *
@@ -66,6 +91,7 @@ export function resolveConfigFromEnv(env, home = homedir()) {
         return { status: "not-configured", failures };
     }
     const cacheRoot = trimmed(env.XDG_CACHE_HOME) ?? join(home, ".cache");
+    const declaredSource = sourceName(env.AGENTMETER_SOURCE, failures);
     const config = {
         endpoint,
         token,
@@ -77,6 +103,8 @@ export function resolveConfigFromEnv(env, home = homedir()) {
         maxQueuedBatches: positiveInteger(env.AGENTMETER_MAX_QUEUED_BATCHES, DEFAULT_MAX_QUEUED_BATCHES, "AGENTMETER_MAX_QUEUED_BATCHES", failures),
         runBudgetMs: positiveInteger(env.AGENTMETER_RUN_BUDGET_MS, DEFAULT_RUN_BUDGET_MS, "AGENTMETER_RUN_BUDGET_MS", failures),
         requestTimeoutMs: positiveInteger(env.AGENTMETER_REQUEST_TIMEOUT_MS, DEFAULT_REQUEST_TIMEOUT_MS, "AGENTMETER_REQUEST_TIMEOUT_MS", failures),
+        // Absent, never `undefined`: a run with no declared name has no such field.
+        ...(declaredSource === undefined ? {} : { sourceName: declaredSource }),
     };
     return { status: "configured", config, failures };
 }

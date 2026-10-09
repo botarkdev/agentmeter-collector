@@ -1,3 +1,4 @@
+import type { Attributor } from "../attribution/attribution-rules.js";
 import type { MeasurementEntry } from "../contract/ingest-contract.js";
 import type { ScanCursor } from "../cursor/scan-cursor.js";
 import type { TurnScope } from "../scope/turn-scope.js";
@@ -31,4 +32,6 @@ export interface CollectResult {
 }
 export declare function collectMeasurements(files: readonly string[], cursor: ScanCursor, pricingTier: string, outcome: RunOutcomeAccumulator, deps: CollectDependencies, 
 /** Absent: every turn on the machine is reported. */
-scope?: TurnScope): Promise<CollectResult>;
+scope?: TurnScope, 
+/** Absent: the run has no attribution rules, and no measurement carries a dimension. */
+attribute?: Attributor): Promise<CollectResult>;
