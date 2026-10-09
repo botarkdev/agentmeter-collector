@@ -32,17 +32,33 @@ Answered by the repository owner, on 2026-10-09, to the orchestrator's questions
 plan as written: two sources are added, so the plan is revised and reviewed again before anything
 is built.
 
-## plan decisions the orchestrator would give, once the above are answered
+## plan gate, second revision
 
-Not given to the lane: they only mean something if O1 is yes, and the owner may change any of
-them.
+Reviewed: the revised plan at `a16e883`, the range `8cae07c..a16e883` (the plan artifact, nothing
+else). Nothing was built. The lane established from the structure of local transcripts — event
+types, key names and counts only, no value read out — that a name typed by the user and a name
+generated from the conversation are recorded as the same event with the same keys, so the two
+cannot be told apart reliably.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| O6 | No session name can be sent reliably. How is the plan closed? | the branch and `AGENTMETER_SOURCE`, no session name · also a type variable so the name works with no rule file · try the session name by matching a recorded rename | **the branch and `AGENTMETER_SOURCE`; no session name** | The owner's answer, on 2026-10-09. O2(b) is closed as not possible reliably; the three title events stay unread and a test holds that. |
+| O7 | Does `AGENTMETER_SOURCE` send anything without a committed rule file? | no · yes, with a second variable naming the type | **no** | The owner's answer: the same option. The vocabulary stays in a reviewed file; a folder without the file sends no name. |
+| O8 | May a `source` rule send the variable's whole value, up to 128 characters? | yes · no | **yes** | It follows from the owner's answer to O3 and from the option chosen for O6: the value is the user's own declared text, and a rule captures what its committed pattern says. Recorded by the orchestrator as following from those answers, and pointed out to the owner at hand-off. |
+
+Answered by the repository owner for O6 and O7.
+
+## plan decisions given to the lane
 
 | # | Question | Options | Decision | Reason |
 |---|---|---|---|---|
 | P1 | Where is the file read from? | the root the scope already uses · the worktree the run started in · a path in an environment variable | as recommended: **the scope's root** | One definition of "the repository" in the collector. |
 | P2 | What does an invalid file do? | submit without dimensions and report · collect nothing until fixed | as recommended: **submit without dimensions and report** | Rule 1; token counts cannot be recovered once transcripts rotate. |
 | P3 | Unknown keys in the file? | the whole file is invalid · ignored | as recommended: **the whole file is invalid** | A later privacy key (C003) must never be silently ignored by an older collector. |
-| P4 | Several matching rules? | first match wins · every match emits | as recommended: **first match wins** | Predictable, and a catch-all rule can close the list. |
+| P4 | Several matching rules? | first match wins per source · first match over the whole list · every match emits | as recommended: **first match wins per source** | Otherwise a branch rule would silence every source rule. |
 | P5 | How is a committed regular expression bounded? | a `node:vm` timeout · an own pattern language · no bound | as recommended: **the `node:vm` timeout** | Rule 1 with no dependency; the lane measured it. |
-| P6 | The limits (64 KiB, 32 rules, 8 emits, 512-character pattern, 64-character type, 128-character key, 255-character branch, 50 ms)? | as proposed · other values | as recommended: **as proposed** | None is part of the design. |
-| P7 | Under `AGENTMETER_SCOPE=machine`? | no file read, no dimension · the run directory's file | as recommended: **no file, no dimension** | One repository's rules must not label another's turns. |
+| P6 | The limits? | as proposed, plus at most 16 dimensions per measurement · other values | as recommended: **as proposed** | None is part of the design. |
+| P7 | Under `AGENTMETER_SCOPE=machine`? | no file read, no dimension, `AGENTMETER_SOURCE` ignored · the run directory's file | as recommended: **no file, no dimension** | One repository's rules must not label another's turns. |
+| P8 | The names? | `AGENTMETER_SOURCE` and `"from": "source"` · `AGENTMETER_SOURCE_NAME` · `"from": "environment"` | as recommended: **`AGENTMETER_SOURCE`, `"from": "source"`** | "environment" reads as any variable, which it must never be. |
+| P9 | An out-of-bounds value of the variable? | treated as not set and reported · truncated | as recommended: **not set, reported `invalid-setting`** | The existing rule for a bad setting; a truncated name is a wrong name. |
+| P10 | How is the dependency on the service's pinned document sequenced? | the service's change on a branch while the lane builds, the copy taken from that ref · wait for the service's merge | as recommended: **in parallel** | The orchestrator opens the task in the service's repository and names the ref; `source.commit` stays `null` until that change is on the service's `main`. |
