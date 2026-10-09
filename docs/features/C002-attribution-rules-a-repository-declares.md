@@ -646,3 +646,27 @@ enforcement was then checked the other way, by breaking it on purpose and restor
 | Extraction and the projection pass dimension objects through instead of rebuilding them | "rebuilds a dimension by name…"; "builds new objects rather than passing the turn's own through" |
 | The extracted turn carries the branch | "carries the branch no further than extraction…"; "carries the dimensions it was given on the turn, and never the branch they came from" |
 | The parser accepts a third source, `session` | "refuses a rule file whose rule reads \"session\"…"; "refuses a rule that reads \"session\"…"; "submits without dimensions, and says why, when the file names a source it does not know" |
+
+## Verification
+
+The built binary (`dist/cli/agentmeter.js`, `agentmeter push`) was run in a throwaway repository
+under a temporary directory: a `.git` directory, a `.agentmeter.json` with the two rules of
+"Behaviour", and a temporary transcripts directory holding only invented events — a
+`custom-title` and an `ai-title` event, and two turns recorded in that repository, one on
+`K123-add-export` and one on `main`. The environment was emptied and set by hand: an endpoint
+under the reserved `.invalid` domain, which resolves nowhere, a placeholder token, the temporary
+directories. Nothing was sent; each run's request body was read from its queue. Everything was
+removed afterwards.
+
+| Run | Printed | Queued request body |
+| --- | --- | --- |
+| Valid rules, `AGENTMETER_SOURCE=laptop-a`, started in a subdirectory | `found 2 · … · queued 1 · attributed 2 · transport:unreachable 1`, exit 0 | The task turn: the six fields and `dimensions` `[{task, K123}, {checkout, laptop-a}]`. The `main` turn: `[{checkout, laptop-a}]`. No `add-export`, no content, no title, no token, no path anywhere in the queue. |
+| The same, no source declared | `… attributed 1 …`, exit 0 | The task turn carries `[{task, K123}]`; the `main` turn has no `dimensions` key. |
+| The file given an unknown key | `… attribution:invalid-rules 1 …`, exit 0 | Both turns, each with exactly the six fields. |
+| A `source` rule whose pattern backtracks without bound | `… attribution:rule-timeout 1 …`, exit 0 | Both turns submitted to the queue, the run returning at once. |
+| No rule file, source declared | no `attributed`, no `attribution` failure, exit 0 | No `dimensions` anywhere. |
+| Nothing configured | `not configured … nothing collected`, exit 0 | — |
+
+The behaviour is the plan's. Not exercised here: a delivery the service accepts, since nothing is
+ever sent to a real endpoint from a check; the accepted path is covered by the unit suite against
+the service's pinned example.
