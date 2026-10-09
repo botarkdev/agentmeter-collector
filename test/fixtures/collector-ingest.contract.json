@@ -1,6 +1,6 @@
 {
   "contract": "collector-ingest",
-  "version": 1,
+  "version": 2,
   "description": "What the published collector sends to the ingestion endpoint and what it reads out of each answer. apps/api/test/unit/collector-ingest-contract.unit.test.ts holds the endpoint to it; see apps/api/README.md, \"The collector's ingestion contract\". Every value is a placeholder.",
   "consumer": {
     "repository": "botarkdev/agentmeter-collector",
@@ -17,9 +17,10 @@
     "batchFields": ["agent", "measurements"],
     "measurementFields": {
       "always": ["idempotencyKey", "occurredAt", "model", "pricingTier", "tokens"],
-      "whenKnown": ["sessionId"]
+      "whenKnown": ["sessionId", "dimensions"]
     },
     "tokenFields": ["input", "output", "cacheWrite5m", "cacheWrite1h", "cacheRead"],
+    "dimensionFields": ["type", "key"],
     "examples": [
       {
         "agent": "claude-code",
@@ -36,7 +37,8 @@
               "cacheWrite5m": 0,
               "cacheWrite1h": 7028,
               "cacheRead": 20628
-            }
+            },
+            "dimensions": [{ "type": "task", "key": "K123" }]
           }
         ]
       },

@@ -1,8 +1,7 @@
 # C002 — Attribution rules a repository declares
 
-**Status**: plan approved (second revision, 2026-10-09); implemented, **except the refresh of the
-service's pinned contract copy**, which waits for version 2 of that document. See
-"Implementation" at the end.
+**Status**: plan approved (second revision, 2026-10-09); implemented and verified. See
+"Implementation" and "Verification" at the end.
 
 **This plan amends rule 2** ("It sends metrics, never content"), on the owner's decision of
 2026-10-09 (`docs/autopilot/decisions/C002-attribution-rules-a-repository-declares.md`): for a
@@ -598,15 +597,15 @@ Built as planned. Three things differ from the plan's wording, none from its des
 - **A placeholder in a `type`, and a stray brace in a `key`, are reported as
   `unknown-placeholder`.**
 
-### Waiting on the service's document
+### The service's pinned document
 
-`test/unit/contract/service-contract.unit.test.ts` fails in three tests, and only those, until
-`test/fixtures/collector-ingest.contract.json` is refreshed from version 2 of the service's
-document: "declares exactly the pinned measurement fields", "declares exactly the pinned dimension
-fields" and "sends, in every dimension of every example, exactly the pinned dimension fields". The
-copy was not touched. In a throwaway copy of the sources outside the repository, with the fixture
-changed exactly as "A dependency outside this repository" specifies, the whole suite passed
-(406 of 406). Criterion 20 is therefore written and not yet met.
+`test/fixtures/collector-ingest.contract.json` was refreshed to version 2 of the service's
+document, copied byte for byte (SHA-256 `398e7fab…908bd6`, checked before and after the copy)
+from the service's branch that names `dimensions`; every value in it was read and is a
+placeholder. `source.commit` in the provenance record is `null`: that change is not yet on the
+service's `main`, and the commit is filled in when it is. Until the copy was refreshed, three
+tests of `test/unit/contract/service-contract.unit.test.ts` failed, and only those — the ones
+that hold the collector's declared fields equal to the document's.
 
 ### Acceptance criteria and the tests that cover them
 
@@ -633,8 +632,8 @@ Suites are under `test/unit/`; a name in quotes is a `describe` block.
 | 17 | `contract/content-safety` "carries the branch no further than extraction…", "hands a rule nothing of the event but the branch", "rebuilds a dimension by name…"; `claude-code/usage-extraction` "attribution". |
 | 18 | `run/collect` "counts the measurements that carry a dimension"; `cli/run-cli` "says how many measurements carry a dimension…"; `run/run-collector` "reports counts and codes only: no branch, no name and no dimension in the outcome"; `config/collector-config` "…names the variable, never the value". |
 | 19 | `run/run-collector` "keeps the dimensions in a retained batch and delivers them with it on a later run". |
-| 20 | `contract/service-contract` — **red until the copy is refreshed** (above). |
-| 21 | `package.json` has no `dependencies`; `pnpm format:check`, `pnpm typecheck`, `pnpm build` and `pnpm check:package` pass; `pnpm test:cov` fails on criterion 20's three tests only (coverage with them failing: 98.95% statements, 97.95% branches, thresholds unchanged). |
+| 20 | `contract/service-contract`: "declares exactly the pinned measurement fields", "declares exactly the pinned dimension fields", "sends, in every dimension of every example, exactly the pinned dimension fields", "projects a turn to the example …, value for value", "is the one the provenance record names, byte for byte". |
+| 21 | `package.json` has no `dependencies`; `taskrail checks C002 --stage implement` passes both checks: 406 tests, coverage 98.95% statements and 97.95% branches with the thresholds unchanged, the build, the packed artefact, formatting and types. |
 
 ### Seen failing first
 
