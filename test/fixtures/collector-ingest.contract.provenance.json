@@ -1,0 +1,12 @@
+{
+  "document": "collector-ingest.contract.json",
+  "source": {
+    "repository": "botarkdev/agentmeter",
+    "path": "apps/api/contracts/collector-ingest.json",
+    "addedBy": "T153",
+    "commit": null
+  },
+  "version": 1,
+  "sha256": "4cf2bfb6bb0b925b92cdc7c24cf5107eaf0f67e2cfb9653886eae0548479489d",
+  "copiedOn": "2026-10-09"
+}
