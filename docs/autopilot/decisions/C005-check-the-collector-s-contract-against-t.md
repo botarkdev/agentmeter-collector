@@ -26,3 +26,18 @@ For the owner, outside this task: the lane noticed that the example request in
 `specs/0019-claude-code-collector/contracts/ingest-submission.md`, already public, carries an
 `idempotencyKey` and a `sessionId` that do not look like placeholders. It is a governing path and
 was not touched.
+
+## implement gate
+
+Reviewed: the range `e849d7c..56842d4` — the copied document (its SHA-256 recomputed by the
+orchestrator and equal to the recorded one), the provenance record, the new unit test as the lane
+reported it (24 tests), and the diff of `src/contract/ingest-contract.ts`, comments only. Broken on
+purpose by the orchestrator in the lane's worktree: a token field renamed in
+`measurement-projection.ts` — the contract test failed — then restored, tree clean. Re-run:
+`taskrail checks C005` — `test` and `lint` passed; `taskrail validate` — 5 tasks, 0 errors. The
+lane showed each assertion failing under a deliberate change to the collector and, separately, to
+the copy and its record. The collector departs from the document nowhere.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Is the implement stage approved? | approve · amend | **approve** | The collector is held to the copy, the copy to its recorded hash, and nothing that ships changed: the package is the same 39 files. |
