@@ -3,6 +3,10 @@ dist/
 coverage/
 pnpm-lock.yaml
 
+# taskrail's install manifest, written by that tool in its own style: each `taskrail upgrade`
+# would undo a reformat.
+.taskrail/installed.json
+
 # Copied byte for byte from genki (CLAUDE.md, "Working with the repository owner"): it stays in
 # its source's style so a diff against the source shows nothing.
 scripts/telegram-notify.mjs

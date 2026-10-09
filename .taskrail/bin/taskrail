@@ -1,0 +1,34 @@
+#!/bin/sh
+# Managed by taskrail: `taskrail init` and `taskrail upgrade` rewrite this file.
+# Runs the taskrail version pinned in .taskrail/config.toml: the installed CLI when it matches,
+# otherwise that exact version through uvx. A pin of the form `local:<path>` runs the taskrail
+# source at that path inside this checkout instead. It acts on the checkout it lives in, whatever
+# the current directory is, since it passes that root to the CLI; --root overrides that, and
+# TASKRAIL_BIN overrides the wrapper entirely.
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+if [ -n "${TASKRAIL_BIN:-}" ]; then
+  exec "$TASKRAIL_BIN" "$@"
+fi
+pin=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$root/.taskrail/config.toml" | head -n 1)
+case "$pin" in
+  local:*)
+    exec uv run --quiet --project "$root/${pin#local:}" taskrail --root "$root" "$@"
+    ;;
+esac
+installed=$(command -v taskrail 2>/dev/null || true)
+if [ -n "$installed" ] && [ "$installed" != "$0" ]; then
+  have=$(taskrail --version 2>/dev/null | sed 's/^taskrail //')
+  if [ -z "$pin" ] || [ "v$have" = "$pin" ]; then
+    exec taskrail --root "$root" "$@"
+  fi
+fi
+if [ -z "$pin" ]; then
+  echo "taskrail: not installed, and no version is pinned in .taskrail/config.toml" >&2
+  exit 2
+fi
+if ! command -v uvx >/dev/null 2>&1; then
+  echo "taskrail: $pin is needed but neither a matching taskrail nor uvx is installed (https://docs.astral.sh/uv/)" >&2
+  exit 2
+fi
+exec uvx --quiet --from "git+${TASKRAIL_SOURCE:-https://github.com/botarkdev/taskrail.git}@$pin" taskrail --root "$root" "$@"
