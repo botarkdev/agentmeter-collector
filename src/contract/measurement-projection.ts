@@ -1,6 +1,6 @@
 import type { UsageTurn } from "../claude-code/usage-extraction.js";
 import { totalTokens } from "../claude-code/usage-extraction.js";
-import type { MeasurementEntry } from "./ingest-contract.js";
+import type { MeasurementEntry, WireDimension } from "./ingest-contract.js";
 
 /**
  * The allowlist projection (spec.md FR-024; research.md Decision 5).
@@ -14,6 +14,11 @@ import type { MeasurementEntry } from "./ingest-contract.js";
  * This matters concretely: the transcript events these turns come from carry `cwd`, `gitBranch`,
  * `slug`, `entrypoint`, `error` and the full text of every prompt, tool call and file the agent
  * read. The service is about to be public.
+ *
+ * `dimensions` is the one field whose values a repository's own rules derive
+ * (specs/attribution-rules/decision.md). It is written out the same way: each dimension is rebuilt
+ * from its two named properties, so whatever else an object handed in here might carry stays
+ * behind.
  */
 
 /** The complete field set of a submitted measurement. Exported so the content-safety test can
@@ -25,7 +30,11 @@ export const MEASUREMENT_ENTRY_FIELDS = [
   "model",
   "pricingTier",
   "tokens",
+  "dimensions",
 ] as const;
+
+/** The complete field set of one dimension. */
+export const DIMENSION_FIELDS = ["type", "key"] as const;
 
 export const TOKEN_FIELDS = [
   "input",
@@ -44,12 +53,38 @@ export function projectMeasurement(turn: UsageTurn, pricingTier: string): Measur
     cacheRead: turn.tokens.cacheRead,
   };
 
-  // Two explicit literals rather than one plus a conditional spread: the schema refuses a null or
-  // empty `sessionId`, and "absent" has to mean the key is not there at all.
+  const dimensions: WireDimension[] = [];
+  for (const dimension of turn.dimensions ?? []) {
+    dimensions.push({ type: dimension.type, key: dimension.key });
+  }
+
+  // Explicit literals rather than one plus conditional spreads: the schema refuses a null or
+  // empty `sessionId`, and "absent" has to mean the key is not there at all. The same holds for
+  // `dimensions`: a measurement with none is the entry this collector always sent.
   if (turn.sessionId === undefined) {
+    if (dimensions.length === 0) {
+      return {
+        idempotencyKey: turn.messageId,
+        occurredAt: turn.occurredAt,
+        model: turn.model,
+        pricingTier,
+        tokens,
+      };
+    }
     return {
       idempotencyKey: turn.messageId,
       occurredAt: turn.occurredAt,
+      model: turn.model,
+      pricingTier,
+      tokens,
+      dimensions,
+    };
+  }
+  if (dimensions.length === 0) {
+    return {
+      idempotencyKey: turn.messageId,
+      occurredAt: turn.occurredAt,
+      sessionId: turn.sessionId,
       model: turn.model,
       pricingTier,
       tokens,
@@ -62,6 +97,7 @@ export function projectMeasurement(turn: UsageTurn, pricingTier: string): Measur
     model: turn.model,
     pricingTier,
     tokens,
+    dimensions,
   };
 }
 

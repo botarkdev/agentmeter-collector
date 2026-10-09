@@ -11,6 +11,20 @@ they were written there, and the pull request numbers in them are that repositor
 
 ## [Unreleased]
 
+### Added
+
+- **Attribution rules a repository declares.** A repository that commits `.agentmeter.json` at
+  its root has `dimensions` sent with each measurement: pairs of a `type` written in that file and
+  a `key` built from what the file's own patterns capture of the turn's recorded branch name, or
+  of the name declared in the new variable `AGENTMETER_SOURCE`. A repository without the file
+  sends exactly what it sent before. `README.md`, "Attribution";
+  `specs/attribution-rules/decision.md`.
+- `AGENTMETER_SOURCE`: a name for where the metrics come from. It is sent only through a `source`
+  rule of the committed file.
+- The run outcome carries `scan.turnsAttributed`, the failure stage `attribution` and the reasons
+  `invalid-rules`, `unreadable-rules` and `rule-timeout`.
+- The `WireDimension` type, and `dimensions` on `MeasurementEntry`.
+
 ## 0.2.0 — 2026-10-08
 
 The first release from this repository, and the first that can be installed without a clone.

@@ -7,9 +7,11 @@
  *
  * - `runCollector` never rejects. Every failure — unreachable service, expired token, unreadable
  *   transcript, full disk — is data in the returned outcome.
- * - Only counters and identifiers leave the machine. Nothing derived from message content, file
- *   contents, paths, or branch names is transmitted, and that is enforced by construction rather
- *   than by convention.
+ * - Only counters and identifiers leave the machine, plus — for a repository that committed
+ *   attribution rules — what those rules capture of a branch name or of a name the user declared
+ *   (`specs/attribution-rules/decision.md`). Nothing derived from message content, file contents,
+ *   paths or a session's name is transmitted, and that is enforced by construction rather than by
+ *   convention.
  *
  * Only what a caller needs is exported. The scanning, queueing and transport internals are not
  * part of this package's contract and may change without notice.
@@ -41,4 +43,4 @@ export type {
 } from "./run/run-outcome.js";
 
 export { CLAUDE_CODE_AGENT, INGEST_PATH } from "./contract/ingest-contract.js";
-export type { IngestBatch, MeasurementEntry } from "./contract/ingest-contract.js";
+export type { IngestBatch, MeasurementEntry, WireDimension } from "./contract/ingest-contract.js";

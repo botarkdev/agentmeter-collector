@@ -35,7 +35,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
 
 /**
  * One line, built only from counts and closed-vocabulary codes. Nothing here interpolates a path,
- * a URL, a token, or anything read out of a transcript — a summary printed into a developer's
+ * a URL, a token, a dimension, or anything read out of a transcript — a summary printed into a developer's
  * terminal is as public as anything this package produces (spec.md FR-025, FR-027).
  */
 export function summarise(outcome: RunOutcome): string {
@@ -52,6 +52,9 @@ export function summarise(outcome: RunOutcome): string {
   ];
   if (outcome.scan.turnsOutOfScope > 0) {
     parts.push(`out-of-scope ${outcome.scan.turnsOutOfScope}`);
+  }
+  if (outcome.scan.turnsAttributed > 0) {
+    parts.push(`attributed ${outcome.scan.turnsAttributed}`);
   }
   if (outcome.queue.discarded > 0) {
     parts.push(`discarded ${outcome.queue.discarded}`);

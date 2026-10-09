@@ -1,3 +1,4 @@
+import type { Attributor } from "../attribution/attribution-rules.js";
 import { extractUsageTurn } from "../claude-code/usage-extraction.js";
 import type { MeasurementEntry } from "../contract/ingest-contract.js";
 import { measurementTotal, projectMeasurement } from "../contract/measurement-projection.js";
@@ -50,6 +51,8 @@ export async function collectMeasurements(
   deps: CollectDependencies,
   /** Absent: every turn on the machine is reported. */
   scope?: TurnScope,
+  /** Absent: the run has no attribution rules, and no measurement carries a dimension. */
+  attribute?: Attributor,
 ): Promise<CollectResult> {
   const byKey = new Map<string, MeasurementEntry>();
   const nextFiles: Record<string, CursorEntry> = { ...cursor.files };
@@ -85,7 +88,7 @@ export async function collectMeasurements(
     let read: TranscriptReadResult;
     try {
       read = await deps.readLines(path, from, (parsed) => {
-        const result = extractUsageTurn(parsed, accepts);
+        const result = extractUsageTurn(parsed, accepts, attribute);
         if (result.kind === "ignored") {
           return;
         }
@@ -132,5 +135,6 @@ export async function collectMeasurements(
 
   const entries = [...byKey.values()];
   outcome.measurements += entries.length;
+  outcome.turnsAttributed += entries.filter((entry) => entry.dimensions !== undefined).length;
   return { entries, nextCursor: { version: 1, files: nextFiles } };
 }

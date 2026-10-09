@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { extractUsageTurn, totalTokens } from "../../../src/claude-code/usage-extraction.js";
+import type { Attributor } from "../../../src/attribution/attribution-rules.js";
 import { assistantTurn } from "../support/transcripts.js";
 
 describe("extractUsageTurn", () => {
@@ -252,6 +253,89 @@ describe("extractUsageTurn: with a scope", () => {
     });
 
     expect(result).toEqual({ kind: "ignored" });
+    expect(asked).toBe(0);
+  });
+});
+
+describe("extractUsageTurn: attribution", () => {
+  const taskOf: Attributor = ({ branch }) =>
+    branch === undefined ? [] : [{ type: "task", key: branch.slice(0, 4) }];
+
+  it("hands the attribution function the branch the turn records, and nothing else", () => {
+    const seen: unknown[] = [];
+    extractUsageTurn(
+      assistantTurn({ gitBranch: "K123-add-export", cwd: "/work/acme/widgets" }),
+      undefined,
+      (input) => {
+        seen.push(input);
+        return [];
+      },
+    );
+
+    expect(seen).toEqual([{ branch: "K123-add-export" }]);
+  });
+
+  it("hands it no branch at all for a turn that records none, or an empty one", () => {
+    const seen: unknown[] = [];
+    const record: Attributor = (input) => {
+      seen.push(input);
+      return [];
+    };
+    extractUsageTurn(assistantTurn(), undefined, record);
+    extractUsageTurn(assistantTurn({ gitBranch: "" }), undefined, record);
+
+    expect(seen).toEqual([{}, {}]);
+  });
+
+  it("carries the dimensions it was given on the turn, and never the branch they came from", () => {
+    const result = extractUsageTurn(
+      assistantTurn({ gitBranch: "K123-add-export" }),
+      undefined,
+      taskOf,
+    );
+
+    expect(result.kind === "turn" && result.turn.dimensions).toEqual([
+      { type: "task", key: "K123" },
+    ]);
+    expect(JSON.stringify(result)).not.toContain("add-export");
+  });
+
+  it("omits dimensions entirely when the rules gave the turn none", () => {
+    const result = extractUsageTurn(assistantTurn({ gitBranch: "main" }), undefined, () => []);
+    expect(result.kind).toBe("turn");
+    if (result.kind !== "turn") return;
+    expect("dimensions" in result.turn).toBe(false);
+  });
+
+  it("omits dimensions entirely when no attribution function is given, as before", () => {
+    const result = extractUsageTurn(assistantTurn({ gitBranch: "K123-add-export" }));
+    expect(result.kind).toBe("turn");
+    if (result.kind !== "turn") return;
+    expect("dimensions" in result.turn).toBe(false);
+  });
+
+  it("keeps a turn with no session id and carries its dimensions", () => {
+    const result = extractUsageTurn(
+      assistantTurn({ sessionId: null, gitBranch: "K123-add-export" }),
+      undefined,
+      taskOf,
+    );
+    expect(result.kind).toBe("turn");
+    if (result.kind !== "turn") return;
+    expect("sessionId" in result.turn).toBe(false);
+    expect(result.turn.dimensions).toEqual([{ type: "task", key: "K123" }]);
+  });
+
+  it("does not ask about a turn it is not going to report", () => {
+    let asked = 0;
+    const count: Attributor = () => {
+      asked += 1;
+      return [];
+    };
+    extractUsageTurn(assistantTurn({ cwd: "/elsewhere" }), () => false, count);
+    extractUsageTurn(assistantTurn({ model: null }), undefined, count);
+    extractUsageTurn({ type: "user" }, undefined, count);
+
     expect(asked).toBe(0);
   });
 });

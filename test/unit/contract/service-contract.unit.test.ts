@@ -13,6 +13,7 @@ import {
   type MeasurementEntry,
 } from "../../../src/contract/ingest-contract.js";
 import {
+  DIMENSION_FIELDS,
   MEASUREMENT_ENTRY_FIELDS,
   TOKEN_FIELDS,
   projectMeasurement,
@@ -39,7 +40,8 @@ import {
  * document does not name, and reads nothing out of an answer that the document does not pin.**
  * So a field added to the projection alone fails here. An approved one arrives in two deliberate
  * steps: the service names it in its document and raises `version`, and the copy is refreshed;
- * and the collector adds it to `MEASUREMENT_ENTRY_FIELDS` and to the projection.
+ * and the collector adds it to `MEASUREMENT_ENTRY_FIELDS` and to the projection. `dimensions`
+ * arrived that way, with version 2 of the document (specs/attribution-rules/decision.md).
  *
  * When a test here fails, the collector has departed from the document, or the copy has been
  * changed. Never edit the copy to make it pass. To refresh it when the service raises `version`:
@@ -59,6 +61,7 @@ interface ContractExampleEntry {
   readonly model: string;
   readonly pricingTier: string;
   readonly tokens: UsageTurn["tokens"];
+  readonly dimensions?: readonly { readonly type: string; readonly key: string }[];
 }
 
 interface ContractDocument {
@@ -74,6 +77,7 @@ interface ContractDocument {
       readonly whenKnown: readonly string[];
     };
     readonly tokenFields: readonly string[];
+    readonly dimensionFields: readonly string[];
     readonly examples: readonly {
       readonly agent: string;
       readonly measurements: readonly ContractExampleEntry[];
@@ -143,7 +147,11 @@ function turnFrom(entry: ContractExampleEntry): UsageTurn {
     model: entry.model,
     tokens: entry.tokens,
   };
-  return entry.sessionId === undefined ? turn : { ...turn, sessionId: entry.sessionId };
+  return {
+    ...turn,
+    ...(entry.sessionId === undefined ? {} : { sessionId: entry.sessionId }),
+    ...(entry.dimensions === undefined ? {} : { dimensions: entry.dimensions }),
+  };
 }
 
 function project(entry: ContractExampleEntry): MeasurementEntry {
@@ -212,6 +220,19 @@ describe("what the collector sends, against the service's contract", () => {
 
   it("declares exactly the pinned token fields", () => {
     expect(sorted(TOKEN_FIELDS)).toEqual(sorted(contract.request.tokenFields));
+  });
+
+  it("declares exactly the pinned dimension fields", () => {
+    expect(sorted(DIMENSION_FIELDS)).toEqual(sorted(contract.request.dimensionFields));
+  });
+
+  it("sends, in every dimension of every example, exactly the pinned dimension fields", () => {
+    const dimensions = exampleEntries.flatMap((entry) => project(entry).dimensions ?? []);
+
+    expect(dimensions.length).toBeGreaterThan(0);
+    for (const dimension of dimensions) {
+      expect(keysOf(dimension)).toEqual(sorted(contract.request.dimensionFields));
+    }
   });
 
   it.each(exampleEntries.map((entry) => [entry.idempotencyKey, entry] as const))(

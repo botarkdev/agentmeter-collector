@@ -35,6 +35,8 @@ export interface AssistantTurnOptions {
   readonly omitItemisedCacheCreation?: boolean;
   /** The working directory the turn records. Absent by default, as on a turn that records none. */
   readonly cwd?: string;
+  /** The branch the turn records. Absent by default, as on a turn that records none. */
+  readonly gitBranch?: string;
 }
 
 /** One assistant turn, shaped like the real thing. Fields set to `null` are omitted entirely, so
@@ -76,6 +78,9 @@ export function assistantTurn(options: AssistantTurnOptions = {}): Record<string
   if (options.cwd !== undefined) {
     event.cwd = options.cwd;
   }
+  if (options.gitBranch !== undefined) {
+    event.gitBranch = options.gitBranch;
+  }
   return event;
 }
 
@@ -95,7 +100,16 @@ export const MARKERS = {
   error: "MARKER_ERROR_TEXT",
   uuid: "MARKER_UUID",
   future: "MARKER_FIELD_NOBODY_HAS_SEEN_YET",
+  customTitle: "MARKER_SESSION_NAME",
+  agentName: "MARKER_AGENT_NAME",
+  aiTitle: "MARKER_GENERATED_TITLE",
 } as const;
+
+/** The task id the marker event's branch starts with. Not a marker: a rule may capture it. */
+export const MARKER_BRANCH_TASK = "K123";
+
+/** The branch the marker event records: something a rule can capture a part of, then the marker. */
+export const MARKER_BRANCH = `${MARKER_BRANCH_TASK}-${MARKERS.branch}`;
 
 export function markerTranscriptEvent(): Record<string, unknown> {
   return {
@@ -104,7 +118,7 @@ export function markerTranscriptEvent(): Record<string, unknown> {
     sessionId: "session-marker",
     requestId: "req_marker",
     cwd: `/home/someone/${MARKERS.cwd}`,
-    gitBranch: MARKERS.branch,
+    gitBranch: MARKER_BRANCH,
     slug: MARKERS.slug,
     entrypoint: MARKERS.entrypoint,
     error: MARKERS.error,
@@ -132,6 +146,20 @@ export function markerTranscriptEvent(): Record<string, unknown> {
       },
     },
   };
+}
+
+/**
+ * The three events in which a session's name or title is recorded, outside its turns. A name the
+ * user typed and one generated from the conversation are written as the same `custom-title`
+ * event, so none of the three is ever read (specs/attribution-rules/decision.md). Each carries a
+ * marker so a test can hold that.
+ */
+export function titleEvents(sessionId = "session-marker"): Record<string, unknown>[] {
+  return [
+    { type: "custom-title", customTitle: MARKERS.customTitle, sessionId },
+    { type: "agent-name", agentName: MARKERS.agentName, sessionId },
+    { type: "ai-title", aiTitle: MARKERS.aiTitle, sessionId },
+  ];
 }
 
 /** Writes JSONL lines (already-stringified or objects) into `<dir>/<name>`. */
