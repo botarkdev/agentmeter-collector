@@ -23,7 +23,8 @@ const REQUIRED = [
   "package/dist/index.d.ts",
   "package/dist/cli/agentmeter.js",
 ];
-// Sources, tests, the design record and developer tooling: none of it runs on a user's machine.
+// Sources, tests, the design record, the backlog and developer tooling: none of it runs on a
+// user's machine.
 const FORBIDDEN_PREFIXES = [
   "package/src/",
   "package/test/",
@@ -32,6 +33,10 @@ const FORBIDDEN_PREFIXES = [
   "package/.github/",
   "package/coverage/",
   "package/node_modules/",
+  "package/docs/",
+  "package/.taskrail/",
+  "package/.claude/",
+  "package/TASKRAIL.md",
 ];
 
 const failures = [];
