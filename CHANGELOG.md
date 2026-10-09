@@ -11,6 +11,8 @@ they were written there, and the pull request numbers in them are that repositor
 
 ## [Unreleased]
 
+## 0.3.0 — 2026-10-09
+
 ### Added
 
 - **Attribution rules a repository declares.** A repository that commits `.agentmeter.json` at
