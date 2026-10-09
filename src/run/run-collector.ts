@@ -1,4 +1,10 @@
 import { stat } from "node:fs/promises";
+import type { Attributor, LoadedRules, RuleMatcher } from "../attribution/attribution-rules.js";
+import {
+  buildAttributor,
+  guardedMatch,
+  loadAttributionRules,
+} from "../attribution/attribution-rules.js";
 import { listTranscriptFiles } from "../claude-code/transcript-locations.js";
 import { readTranscriptLines } from "../claude-code/transcript-reader.js";
 import type { CollectorConfig, ResolvedConfig } from "../config/collector-config.js";
@@ -37,6 +43,11 @@ export interface RunDependencies {
   readonly readLines: typeof readTranscriptLines;
   readonly readCursorFile: typeof readCursor;
   readonly writeCursorFile: typeof writeCursor;
+  /** The attribution rules of the repository at this root. Asked once, and only by a run that
+   * reports one repository. Must not reject; a run survives it if it does. */
+  readonly loadRules: (repositoryRoot: string) => Promise<LoadedRules>;
+  /** One bounded match of a committed pattern. */
+  readonly matchRule: RuleMatcher;
 }
 
 /**
@@ -79,7 +90,49 @@ export function defaultDependencies(config: CollectorConfig, cacheDir: string): 
     readLines: readTranscriptLines,
     readCursorFile: readCursor,
     writeCursorFile: writeCursor,
+    loadRules: (repositoryRoot) => loadAttributionRules(repositoryRoot),
+    matchRule: guardedMatch,
   };
+}
+
+/** What a run was given to attribute with, and how to ask whether it had to give up. */
+interface RunAttribution {
+  readonly attribute: Attributor;
+  readonly timedOut: () => boolean;
+}
+
+/**
+ * The repository's attribution rules, ready to use, or nothing.
+ *
+ * Whatever goes wrong here costs the run its dimensions and nothing else: the measurements are
+ * still collected and submitted, and the outcome says what happened. Token counts cannot be
+ * recovered once a transcript has rotated off disk; a label can be applied again.
+ */
+async function prepareAttribution(
+  repositoryRoot: string,
+  config: CollectorConfig,
+  outcome: RunOutcomeAccumulator,
+  deps: RunDependencies,
+): Promise<RunAttribution | undefined> {
+  let loaded: LoadedRules;
+  try {
+    loaded = await deps.loadRules(repositoryRoot);
+  } catch {
+    loaded = { kind: "failed", reason: "unreadable-rules" };
+  }
+  if (loaded.kind === "none") {
+    return undefined;
+  }
+  if (loaded.kind === "failed") {
+    outcome.fail("attribution", loaded.reason, loaded.detail);
+    return undefined;
+  }
+  return buildAttributor(
+    loaded.rules,
+    config.sourceName === undefined
+      ? { matcher: deps.matchRule }
+      : { source: config.sourceName, matcher: deps.matchRule },
+  );
 }
 
 export async function runCollector(
@@ -103,11 +156,13 @@ export async function runCollector(
   const startedAt = now();
 
   let scope: TurnScope | undefined;
+  let repositoryRoot: string | undefined;
   let cacheDir = config.cacheDir;
   let deps: RunDependencies;
   try {
     if (config.scope === "repository") {
       const root = await scopeDeps.repositoryRoot();
+      repositoryRoot = root;
       scope = repositoryScope(root, config.transcriptsDir);
       cacheDir = repositoryCacheDirectory(config.cacheDir, root);
     }
@@ -121,7 +176,25 @@ export async function runCollector(
   const expired = (): boolean => deps.now() - startedAt >= config.runBudgetMs;
 
   try {
-    await collectAndEnqueue(config, cacheDir, scope, outcome, deps, expired);
+    // A run that reports the whole machine reads no rule file and attributes nothing: one
+    // repository's rules must not label another repository's turns.
+    const attribution =
+      repositoryRoot === undefined
+        ? undefined
+        : await prepareAttribution(repositoryRoot, config, outcome, deps);
+    await collectAndEnqueue(
+      config,
+      cacheDir,
+      scope,
+      attribution?.attribute,
+      outcome,
+      deps,
+      expired,
+    );
+    if (attribution?.timedOut() === true) {
+      // Once, however many turns it cost: the rules were switched off at the first one.
+      outcome.fail("attribution", "rule-timeout");
+    }
     await drain(config, outcome, deps, expired);
   } catch {
     // Structurally unreachable — every stage above is total. Kept because FR-015 is a promise
@@ -138,6 +211,7 @@ async function collectAndEnqueue(
   config: CollectorConfig,
   cacheDir: string,
   scope: TurnScope | undefined,
+  attribute: Attributor | undefined,
   outcome: RunOutcomeAccumulator,
   deps: RunDependencies,
   expired: () => boolean,
@@ -155,6 +229,7 @@ async function collectAndEnqueue(
     outcome,
     { statFile: deps.statFile, readLines: deps.readLines, expired },
     scope,
+    attribute,
   );
 
   if (entries.length > 0) {

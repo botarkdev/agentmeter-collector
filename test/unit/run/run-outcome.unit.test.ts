@@ -13,6 +13,7 @@ describe("RunOutcomeAccumulator", () => {
         linesRead: 0,
         turnsFound: 0,
         turnsOutOfScope: 0,
+        turnsAttributed: 0,
         measurements: 0,
         duplicatesCollapsed: 0,
       },
@@ -80,6 +81,7 @@ describe("RunOutcomeAccumulator", () => {
     accumulator.linesRead = 7;
     accumulator.turnsFound = 6;
     accumulator.turnsOutOfScope = 3;
+    accumulator.turnsAttributed = 2;
     accumulator.measurements = 5;
     accumulator.duplicatesCollapsed = 4;
     accumulator.batchesSent = 3;
@@ -97,6 +99,7 @@ describe("RunOutcomeAccumulator", () => {
       linesRead: 7,
       turnsFound: 6,
       turnsOutOfScope: 3,
+      turnsAttributed: 2,
       measurements: 5,
       duplicatesCollapsed: 4,
     });
@@ -108,5 +111,18 @@ describe("RunOutcomeAccumulator", () => {
     });
     expect(outcome.queue).toEqual({ enqueued: 2, remaining: 1, discarded: 11 });
     expect(outcome.budgetExhausted).toBe(true);
+  });
+
+  it("records what went wrong with a repository's attribution rules as a stage of its own", () => {
+    const accumulator = new RunOutcomeAccumulator();
+    accumulator.fail("attribution", "invalid-rules", "unknown-key");
+    accumulator.fail("attribution", "unreadable-rules");
+    accumulator.fail("attribution", "rule-timeout");
+
+    expect(accumulator.build("collected", 1, false).failures).toEqual([
+      { stage: "attribution", reason: "invalid-rules", count: 1, detail: "unknown-key" },
+      { stage: "attribution", reason: "unreadable-rules", count: 1 },
+      { stage: "attribution", reason: "rule-timeout", count: 1 },
+    ]);
   });
 });

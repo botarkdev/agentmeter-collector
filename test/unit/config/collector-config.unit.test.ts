@@ -4,6 +4,7 @@ import {
   DEFAULT_PRICING_TIER,
   DEFAULT_REQUEST_TIMEOUT_MS,
   DEFAULT_RUN_BUDGET_MS,
+  MAX_SOURCE_NAME_LENGTH,
   resolveConfigFromEnv,
 } from "../../../src/config/collector-config.js";
 
@@ -138,5 +139,52 @@ describe("resolveConfigFromEnv", () => {
     expect(resolved.failures).toEqual([
       { stage: "config", reason: "invalid-setting", count: 1, detail: "AGENTMETER_SCOPE" },
     ]);
+  });
+});
+
+describe("resolveConfigFromEnv: the declared source name", () => {
+  const sourceOf = (value: string | undefined) => {
+    const env = value === undefined ? CONFIGURED : { ...CONFIGURED, AGENTMETER_SOURCE: value };
+    const resolved = resolveConfigFromEnv(env, HOME);
+    if (resolved.status !== "configured") {
+      throw new Error("fixture must be configured");
+    }
+    return resolved;
+  };
+
+  it("has none unless one is declared", () => {
+    const resolved = sourceOf(undefined);
+    expect("sourceName" in resolved.config).toBe(false);
+    expect(resolved.failures).toEqual([]);
+  });
+
+  it("carries the declared name, without the whitespace around it", () => {
+    expect(sourceOf("  laptop-a ").config.sourceName).toBe("laptop-a");
+  });
+
+  it.each(["", "   "])("treats %j as not set, and not as a mistake", (value) => {
+    const resolved = sourceOf(value);
+    expect("sourceName" in resolved.config).toBe(false);
+    expect(resolved.failures).toEqual([]);
+  });
+
+  it("takes a name of exactly the longest length it accepts", () => {
+    const name = "n".repeat(MAX_SOURCE_NAME_LENGTH);
+    expect(sourceOf(name).config.sourceName).toBe(name);
+  });
+
+  it.each([
+    ["longer than it accepts", "n".repeat(MAX_SOURCE_NAME_LENGTH + 1)],
+    ["holding a line break", "laptop\na"],
+    ["holding a control character", "laptop\u0007a"],
+    ["holding a C1 control character", "laptop\u0085a"],
+  ])("treats a name %s as not set, and names the variable, never the value", (_name, value) => {
+    const resolved = sourceOf(value);
+
+    expect("sourceName" in resolved.config).toBe(false);
+    expect(resolved.failures).toEqual([
+      { stage: "config", reason: "invalid-setting", count: 1, detail: "AGENTMETER_SOURCE" },
+    ]);
+    expect(JSON.stringify(resolved.failures)).not.toContain("laptop");
   });
 });

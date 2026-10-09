@@ -17,6 +17,7 @@ const BASE: RunOutcome = {
     linesRead: 10,
     turnsFound: 4,
     turnsOutOfScope: 0,
+    turnsAttributed: 0,
     measurements: 3,
     duplicatesCollapsed: 1,
   },
@@ -111,6 +112,23 @@ describe("summarise", () => {
     expect(summarise({ ...BASE, scan: { ...BASE.scan, turnsOutOfScope: 12 } })).toContain(
       "out-of-scope 12",
     );
+  });
+
+  it("says how many measurements carry a dimension, and nothing when none does", () => {
+    expect(summarise(BASE)).not.toContain("attributed");
+    expect(summarise({ ...BASE, scan: { ...BASE.scan, turnsAttributed: 2 } })).toContain(
+      "attributed 2",
+    );
+  });
+
+  it("names a failure of the attribution rules by its codes, like any other", () => {
+    const line = summarise({
+      ...BASE,
+      failures: [
+        { stage: "attribution", reason: "invalid-rules", count: 1, detail: "unknown-key" },
+      ],
+    });
+    expect(line).toContain("attribution:invalid-rules 1");
   });
 
   it("names every skip reason and every failure, so nothing is invisible", () => {

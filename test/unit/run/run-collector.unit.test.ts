@@ -1,6 +1,8 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { ATTRIBUTION_FILE, guardedMatch } from "../../../src/attribution/attribution-rules.js";
+import { summarise } from "../../../src/cli/run-cli.js";
 import { resolveConfigFromEnv, type ResolvedConfig } from "../../../src/config/collector-config.js";
 import type { IngestBatch } from "../../../src/contract/ingest-contract.js";
 import { readCursor } from "../../../src/cursor/scan-cursor.js";
@@ -659,5 +661,331 @@ describe("runCollector: scoped to a repository", () => {
 
     expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
     expect(outcome.scan.turnsOutOfScope).toBe(0);
+  });
+});
+
+describe("runCollector: attribution rules a repository declares", () => {
+  const TASK_RULE = {
+    from: "branch",
+    match: "^(?<task>[A-Z][0-9]{3})-",
+    emit: [{ type: "task", key: "{task}" }],
+  };
+  const SOURCE_RULE = {
+    from: "source",
+    match: "^(?<name>[a-z0-9-]+)$",
+    emit: [{ type: "checkout", key: "{name}" }],
+  };
+
+  interface Repository extends Harness {
+    readonly root: string;
+    readonly scope: { repositoryRoot: () => Promise<string> };
+  }
+
+  /** A repository in a temporary directory, with a session on a task branch, one on `main`, and
+   * a turn that records no branch. `rules` is written to its `.agentmeter.json` when given. */
+  async function repository(
+    rules: unknown,
+    env: Record<string, string> = {},
+    file?: string,
+  ): Promise<Repository> {
+    const h = await harness({ AGENTMETER_SCOPE: "repository", ...env });
+    const root = join(await makeTempDir(), "widgets");
+    await mkdir(root, { recursive: true });
+    if (file !== undefined) {
+      await writeFile(join(root, ATTRIBUTION_FILE), file, "utf8");
+    } else if (rules !== undefined) {
+      const text = JSON.stringify({ version: 1, attribution: rules });
+      await writeFile(join(root, ATTRIBUTION_FILE), text, "utf8");
+    }
+    await writeTranscript(join(h.transcriptsDir, "sessions"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_task", cwd: root, gitBranch: "K123-add-export" }),
+      assistantTurn({ messageId: "msg_main", cwd: root, gitBranch: "main" }),
+      assistantTurn({ messageId: "msg_none", cwd: root }),
+    ]);
+    return { ...h, root, scope: { repositoryRoot: async () => root } };
+  }
+
+  function dimensionsByKey(transport: { readonly delivered: IngestBatch[] }) {
+    return Object.fromEntries(
+      transport.delivered
+        .flatMap((batch) => batch.measurements)
+        .map((entry) => [entry.idempotencyKey, entry.dimensions]),
+    );
+  }
+
+  it("sends exactly what it sent before for a repository that declares no rules", async () => {
+    const r = await repository(undefined, { AGENTMETER_SOURCE: "laptop-a" });
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent).toHaveLength(3);
+    for (const entry of sent) {
+      expect(Object.keys(entry).sort()).toEqual(
+        ["idempotencyKey", "model", "occurredAt", "pricingTier", "sessionId", "tokens"].sort(),
+      );
+    }
+    expect(JSON.stringify(transport.delivered)).not.toContain("laptop-a");
+    expect(outcome.failures).toEqual([]);
+    expect(outcome.scan.turnsAttributed).toBe(0);
+  });
+
+  it("sends what a branch rule captures, on the turns it matches and on no other", async () => {
+    const r = await repository([TASK_RULE]);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    expect(dimensionsByKey(transport)).toEqual({
+      msg_task: [{ type: "task", key: "K123" }],
+      msg_main: undefined,
+      msg_none: undefined,
+    });
+    expect(JSON.stringify(transport.delivered)).not.toContain("add-export");
+    expect(outcome.scan.turnsAttributed).toBe(1);
+    expect(outcome.failures).toEqual([]);
+  });
+
+  it("sends the declared source name on every measurement when a source rule accepts it", async () => {
+    const r = await repository([SOURCE_RULE], { AGENTMETER_SOURCE: "laptop-a" });
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    const name = [{ type: "checkout", key: "laptop-a" }];
+    expect(dimensionsByKey(transport)).toEqual({ msg_task: name, msg_main: name, msg_none: name });
+    expect(outcome.scan.turnsAttributed).toBe(3);
+  });
+
+  it("sends no name when none is declared, or when no source rule accepts it", async () => {
+    const environments: Record<string, string>[] = [{}, { AGENTMETER_SOURCE: "Not A Slug" }];
+    for (const env of environments) {
+      const r = await repository([SOURCE_RULE], env);
+      const transport = transportOf(ACCEPT_ALL);
+
+      const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+      expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+      expect(outcome.failures).toEqual([]);
+    }
+  });
+
+  it("carries a task from the branch and a name from the variable on the same turn", async () => {
+    const r = await repository([TASK_RULE, SOURCE_RULE], { AGENTMETER_SOURCE: "laptop-a" });
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(r.resolved, { transport }, r.scope);
+
+    expect(dimensionsByKey(transport).msg_task).toEqual([
+      { type: "task", key: "K123" },
+      { type: "checkout", key: "laptop-a" },
+    ]);
+  });
+
+  it.each([
+    ["is not JSON", "{ not json", "not-json"],
+    [
+      "holds a key it does not know",
+      JSON.stringify({ version: 1, attribution: [], token: "x" }),
+      "unknown-key",
+    ],
+    [
+      "names a source it does not know",
+      JSON.stringify({ version: 1, attribution: [{ ...TASK_RULE, from: "session" }] }),
+      "unknown-source",
+    ],
+  ])("submits without dimensions, and says why, when the file %s", async (_name, file, detail) => {
+    const r = await repository(undefined, { AGENTMETER_SOURCE: "laptop-a" }, file);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+    expect(outcome.failures).toEqual([
+      { stage: "attribution", reason: "invalid-rules", count: 1, detail },
+    ]);
+    expect(outcome.scan.turnsAttributed).toBe(0);
+  });
+
+  it("submits without dimensions, and says so, when the file cannot be read", async () => {
+    const r = await repository([TASK_RULE]);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(
+      r.resolved,
+      { transport, loadRules: async () => ({ kind: "failed", reason: "unreadable-rules" }) },
+      r.scope,
+    );
+
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+    expect(outcome.failures).toEqual([
+      { stage: "attribution", reason: "unreadable-rules", count: 1 },
+    ]);
+  });
+
+  it("does not raise, and still submits, when loading the rules raises", async () => {
+    const r = await repository([TASK_RULE]);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(
+      r.resolved,
+      {
+        transport,
+        loadRules: async () => {
+          throw new Error("unexpected");
+        },
+      },
+      r.scope,
+    );
+
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+    expect(outcome.failures).toEqual([
+      { stage: "attribution", reason: "unreadable-rules", count: 1 },
+    ]);
+  });
+
+  it("switches the rules off when a pattern does not answer in time, and reports it once", async () => {
+    const r = await repository([TASK_RULE]);
+    const transport = transportOf(ACCEPT_ALL);
+    let asked = 0;
+
+    const outcome = await runCollector(
+      r.resolved,
+      {
+        transport,
+        // The first branch is answered; the second is the one that never comes back.
+        matchRule: (pattern, text) => {
+          asked += 1;
+          return asked === 1 ? guardedMatch(pattern, text) : { kind: "timeout" };
+        },
+      },
+      r.scope,
+    );
+
+    expect(outcome.status).toBe("collected");
+    expect(dimensionsByKey(transport)).toEqual({
+      msg_task: [{ type: "task", key: "K123" }],
+      msg_main: undefined,
+      msg_none: undefined,
+    });
+    expect(outcome.failures).toEqual([{ stage: "attribution", reason: "rule-timeout", count: 1 }]);
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+  });
+
+  it("is not held by a committed pattern that backtracks without bound", async () => {
+    const r = await repository(
+      [{ from: "source", match: "^(?<a>a+)+$", emit: [{ type: "checkout", key: "{a}" }] }],
+      { AGENTMETER_SOURCE: `${"a".repeat(64)}!` },
+    );
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    expect(outcome.failures).toEqual([{ stage: "attribution", reason: "rule-timeout", count: 1 }]);
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+  });
+
+  it("reads no rule file and sends no dimension when the scope is the machine", async () => {
+    const r = await repository([TASK_RULE, SOURCE_RULE], {
+      AGENTMETER_SCOPE: "machine",
+      AGENTMETER_SOURCE: "laptop-a",
+    });
+    const transport = transportOf(ACCEPT_ALL);
+    const loadRules = vi.fn(async () => ({ kind: "none" }) as const);
+
+    const outcome = await runCollector(r.resolved, { transport, loadRules }, r.scope);
+
+    expect(loadRules).not.toHaveBeenCalled();
+    expect(transport.delivered.flatMap((batch) => batch.measurements)).toHaveLength(3);
+    expect(JSON.stringify(transport.delivered)).not.toContain("dimensions");
+    expect(outcome.failures).toEqual([]);
+  });
+
+  it("reads the rules from the root the scope uses", async () => {
+    const r = await repository([TASK_RULE]);
+    const loadRules = vi.fn(async () => ({ kind: "none" }) as const);
+
+    await runCollector(r.resolved, { transport: transportOf(ACCEPT_ALL), loadRules }, r.scope);
+
+    expect(loadRules).toHaveBeenCalledTimes(1);
+    expect(loadRules).toHaveBeenCalledWith(r.root);
+  });
+
+  it("lets no configuration value but the declared source name reach a dimension", async () => {
+    const everything = {
+      from: "source",
+      match: "^(?<all>.+)$",
+      emit: [{ type: "checkout", key: "{all}" }],
+    };
+    const h = await harness();
+    const root = join(await makeTempDir("MARKER_ROOT_"), "widgets");
+    await mkdir(root, { recursive: true });
+    await writeFile(
+      join(root, ATTRIBUTION_FILE),
+      JSON.stringify({ version: 1, attribution: [everything] }),
+      "utf8",
+    );
+    const transcriptsDir = join(await makeTempDir("MARKER_TRANSCRIPTS_"), "t");
+    const cacheDir = join(await makeTempDir("MARKER_CACHE_"), "c");
+    await writeTranscript(join(transcriptsDir, "sessions"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_a", cwd: root, gitBranch: "MARKER_BRANCH_NAME" }),
+    ]);
+    const resolved = resolveConfigFromEnv(
+      {
+        AGENTMETER_ENDPOINT: "https://marker-endpoint.invalid",
+        AGENTMETER_TOKEN: "MARKER_TOKEN",
+        AGENTMETER_TRANSCRIPTS_DIR: transcriptsDir,
+        AGENTMETER_CACHE_DIR: cacheDir,
+        AGENTMETER_SCOPE: "repository",
+        AGENTMETER_SOURCE: "declared-source-name",
+        AGENTMETER_MAX_BATCH_SIZE: "MARKER_NOT_A_NUMBER",
+        XDG_CACHE_HOME: "/MARKER_XDG",
+        HOME: "/MARKER_HOME",
+        USER: "MARKER_USER",
+        HOSTNAME: "MARKER_HOSTNAME",
+      },
+      "/MARKER_HOME",
+    );
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(resolved, { transport }, { repositoryRoot: async () => root });
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.dimensions)).toEqual([
+      [{ type: "checkout", key: "declared-source-name" }],
+    ]);
+    const serialised = JSON.stringify(transport.delivered);
+    expect(serialised.split("declared-source-name")).toHaveLength(2);
+    expect(serialised.toLowerCase()).not.toContain("marker");
+    expect(h.resolved.status).toBe("configured");
+  });
+
+  it("keeps the dimensions in a retained batch and delivers them with it on a later run", async () => {
+    const r = await repository([TASK_RULE]);
+    await runCollector(r.resolved, { transport: transportOf(() => UNREACHABLE) }, r.scope);
+    // The rules are gone by the next run: what was collected was already decided.
+    await rm(join(r.root, ATTRIBUTION_FILE));
+    const transport = transportOf(ACCEPT_ALL);
+
+    await runCollector(r.resolved, { transport }, r.scope);
+
+    expect(dimensionsByKey(transport).msg_task).toEqual([{ type: "task", key: "K123" }]);
+  });
+
+  it("reports counts and codes only: no branch, no name and no dimension in the outcome", async () => {
+    const r = await repository([TASK_RULE, SOURCE_RULE], { AGENTMETER_SOURCE: "laptop-a" });
+
+    const outcome = await runCollector(r.resolved, { transport: transportOf(ACCEPT_ALL) }, r.scope);
+
+    const reported = `${JSON.stringify(outcome)} ${summarise(outcome)}`;
+    for (const private_ of ["K123", "add-export", "laptop-a", "checkout"]) {
+      expect(reported).not.toContain(private_);
+    }
+    expect(summarise(outcome)).toContain("attributed 3");
   });
 });

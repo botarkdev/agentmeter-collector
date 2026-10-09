@@ -3,6 +3,7 @@ import { collectMeasurements, type CollectDependencies } from "../../../src/run/
 import { emptyCursor, type ScanCursor } from "../../../src/cursor/scan-cursor.js";
 import { RunOutcomeAccumulator } from "../../../src/run/run-outcome.js";
 import { repositoryScope } from "../../../src/scope/turn-scope.js";
+import type { Attributor } from "../../../src/attribution/attribution-rules.js";
 import { assistantTurn } from "../support/transcripts.js";
 
 /** An in-memory filesystem: `path -> lines`. Every dependency of `collectMeasurements` is
@@ -385,5 +386,85 @@ describe("collectMeasurements: with a repository scope", () => {
 
     expect(result.entries).toHaveLength(1);
     expect(outcome.turnsOutOfScope).toBe(0);
+  });
+});
+
+describe("collectMeasurements: attribution", () => {
+  const taskOf: Attributor = ({ branch }) =>
+    branch !== undefined && /^[A-Z][0-9]{3}-/.test(branch)
+      ? [{ type: "task", key: branch.slice(0, 4) }]
+      : [];
+  const onTask = assistantTurn({ messageId: "msg_task", gitBranch: "K123-add-export" });
+  const onMain = assistantTurn({ messageId: "msg_main", gitBranch: "main" });
+  const noBranch = assistantTurn({ messageId: "msg_none" });
+
+  it("puts on each measurement what the rules derive from its own turn's branch", async () => {
+    const outcome = new RunOutcomeAccumulator();
+    const result = await collectMeasurements(
+      ["/t/a.jsonl"],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ "/t/a.jsonl": [onTask, onMain, noBranch] }),
+      undefined,
+      taskOf,
+    );
+
+    const byKey = new Map(result.entries.map((entry) => [entry.idempotencyKey, entry]));
+    expect(byKey.get("msg_task")?.dimensions).toEqual([{ type: "task", key: "K123" }]);
+    expect("dimensions" in (byKey.get("msg_main") ?? {})).toBe(false);
+    expect("dimensions" in (byKey.get("msg_none") ?? {})).toBe(false);
+  });
+
+  it("counts the measurements that carry a dimension", async () => {
+    const outcome = new RunOutcomeAccumulator();
+    await collectMeasurements(
+      ["/t/a.jsonl"],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ "/t/a.jsonl": [onTask, onTask, onMain, noBranch] }),
+      undefined,
+      taskOf,
+    );
+
+    expect(outcome.turnsAttributed).toBe(1);
+    expect(outcome.measurements).toBe(3);
+  });
+
+  it("counts none, and sends none, when the run was given no rules", async () => {
+    const outcome = new RunOutcomeAccumulator();
+    const result = await collectMeasurements(
+      ["/t/a.jsonl"],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({ "/t/a.jsonl": [onTask, onMain] }),
+    );
+
+    expect(outcome.turnsAttributed).toBe(0);
+    expect(result.entries.some((entry) => "dimensions" in entry)).toBe(false);
+  });
+
+  it("attributes only the turns the scope kept", async () => {
+    const outcome = new RunOutcomeAccumulator();
+    const result = await collectMeasurements(
+      ["/t/elsewhere/a.jsonl"],
+      emptyCursor(),
+      "standard",
+      outcome,
+      depsFor({
+        "/t/elsewhere/a.jsonl": [
+          assistantTurn({ messageId: "msg_in", gitBranch: "K123-a", cwd: "/work/acme/widgets" }),
+          assistantTurn({ messageId: "msg_out", gitBranch: "K124-b", cwd: "/work/acme/gadgets" }),
+        ],
+      }),
+      repositoryScope("/work/acme/widgets", "/t"),
+      taskOf,
+    );
+
+    expect(result.entries.map((entry) => entry.idempotencyKey)).toEqual(["msg_in"]);
+    expect(outcome.turnsAttributed).toBe(1);
+    expect(JSON.stringify(result.entries)).not.toContain("K124");
   });
 });

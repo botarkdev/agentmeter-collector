@@ -28,10 +28,22 @@ export interface WireTokenCounts {
 }
 
 /**
+ * One attribution dimension on the wire: what a measurement is charged to. Both strings are the
+ * reporting repository's: `type` is a word of its committed rule file, `key` is what one of that
+ * file's rules built (specs/attribution-rules/decision.md). The service stores them and knows no
+ * vocabulary. `weight` and `confidence`, which the endpoint also defines, are never sent.
+ */
+export interface WireDimension {
+  readonly type: string;
+  readonly key: string;
+}
+
+/**
  * One measurement on the wire. This is the COMPLETE set of fields this collector ever sends:
- * no `payload`, no `dimensions` (attribution is TASKRAIL.md row T013, and deriving one here would
- * mean reading the very fields FR-025 keeps off the wire), and no project or user identity —
- * both are the service's to derive from the token, and no request field can influence either.
+ * no `payload`, and no project or user identity — both are the service's to derive from the
+ * token, and no request field can influence either. `dimensions` is present only for a
+ * repository that committed attribution rules, on a turn one of them matched; otherwise the key
+ * is absent, never empty.
  */
 export interface MeasurementEntry {
   readonly idempotencyKey: string;
@@ -40,6 +52,7 @@ export interface MeasurementEntry {
   readonly model: string;
   readonly pricingTier: string;
   readonly tokens: WireTokenCounts;
+  readonly dimensions?: readonly WireDimension[];
 }
 
 export interface IngestBatch {
