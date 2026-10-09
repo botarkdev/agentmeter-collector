@@ -22,3 +22,16 @@ repository that mentions the licence.
 For the owner: `CLAUDE.md` says the licence is an open decision and is not edited by this task;
 the replacement paragraph is proposed to them. The release already published keeps the previous
 notice until the next release is cut.
+
+## implement gate
+
+Reviewed, uncommitted: seven changed files and the new `NOTICE`. Checked by the orchestrator:
+`LICENSE` has the sha256 the lane reported for the text published at apache.org, `NOTICE` names
+the holder the previous file named, and `package.json` gains the field and ships the notice.
+Re-run by the orchestrator: `taskrail checks C006` — passed (406 tests, the package check, lint).
+Broken on purpose by the orchestrator, then restored: the year in `NOTICE` changed — the package
+check reported it for the installed package and for the `dist` tree.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Commit? | one commit · split · change first | **one commit** | The evidence above. |
