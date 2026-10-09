@@ -65,6 +65,9 @@ record, name things that live in the service's repository: `TASKRAIL.md` rows (`
 `T104`, …), "the Constitution", and paths under `apps/api/`. They are that repository's. Do not
 go looking for them here, and do not delete the comments: they still say why the code is the way
 it is. When a comment you are already editing carries one, say what it meant in words instead.
+This repository's own task IDs are `C###`, so that a `T###` is always the service's. Three of
+those rows were open when the collector left and continue here: `T013` as `C002`, `T030` as
+`C003` and `T014` as `C004`.
 
 ## Working here
 
@@ -95,6 +98,14 @@ only.
 | `pnpm format:check` | Fails on a file Prettier would rewrite. `pnpm format` rewrites it. |
 | `pnpm build` | Removes `dist/` and compiles `src/` into it. `dist/` is the whole package: `package.json` ships nothing else. |
 | `pnpm check:package` | After a build: packs the collector as a release does, checks what is and is not in the file, installs it into an empty project with no network and runs the installed binary. The only check on the artefact — the unit suite imports `src/` and cannot see a package that ships without its binary. |
+
+**Backlog**: [`TASKRAIL.md`](TASKRAIL.md) is a [taskrail](https://github.com/botarkdev/taskrail)
+backlog, configured in `.taskrail/config.toml`. The CLI owns IDs and statuses: run it as
+`.taskrail/bin/taskrail <command>` — `new`, `edit`, `done`, `discard`, `validate` — and never
+type an ID or a status into a row. `taskrail show <ID>` names the skill that works a task of its
+kind, and each task's own document goes under `docs/`. The files under `.claude/skills/taskrail*`
+and `.taskrail/bin/` are taskrail's: they are changed by `taskrail upgrade`, never by hand. None
+of it is part of the package, and `pnpm check:package` fails if it ever is.
 
 **Tests**: unit tests only, every dependency injected and mocked, no network, no file outside a
 temporary directory. A behaviour is tested through the public function that has it, and a bug is
@@ -131,8 +142,9 @@ is still missing. Nothing is published to a package registry.
 
 **Not here yet**: publication to a package registry — the package stays `private` so that it
 cannot be published to one by accident, and its name is not settled (`@agentmeter/collector` is a
-scope nobody has registered). Nor attribution rules a repository declares, privacy controls, or a
-second agent adapter. There is no backlog file in this repository yet.
+scope nobody has registered). Nor attribution rules a repository declares (`TASKRAIL.md` row
+`C002`), privacy controls (`C003`), or a second agent adapter (`C004`). What is left to do is in
+[`TASKRAIL.md`](TASKRAIL.md).
 
 **The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
 carried in the service's repository: it grants nobody permission to use it. That is at odds with
@@ -149,7 +161,7 @@ names and values, commit messages. Only the conversation with the owner may be i
 - Commits follow Conventional Commits: `type(scope): description`, with the affected module as
   scope (`claude-code`, `contract`, `queue`, `cursor`, `transport`, `run`, `config`, `cli`, or
   `repo` for tooling and documentation). When a task id exists it leads the scope:
-  `fix(T012:queue): …`.
+  `fix(C012:queue): …`.
 - A commit message is its subject line and nothing else, by default. A body is written only for
   what neither the subject nor the diff conveys, in one or two lines. Co-authorship trailers are
   exempt.
