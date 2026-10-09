@@ -25,6 +25,12 @@ they were written there, and the pull request numbers in them are that repositor
   `invalid-rules`, `unreadable-rules` and `rule-timeout`.
 - The `WireDimension` type, and `dimensions` on `MeasurementEntry`.
 
+### Changed
+
+- **The package is licensed under Apache-2.0.** It used to carry a notice that granted nobody
+  permission to use it. `LICENSE` is the licence's text, `NOTICE` names the copyright holder, both
+  ship in the package, and `package.json` declares `"license": "Apache-2.0"`.
+
 ## 0.2.0 — 2026-10-08
 
 The first release from this repository, and the first that can be installed without a clone.

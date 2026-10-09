@@ -89,6 +89,11 @@ of the hash in a test would be a second place to keep it.
 
 ## Decisions needed
 
+All four were answered at the scope gate on 2026-10-09 as recommended: `NOTICE` is added and
+shipped, its first line `agentmeter-collector`; no source file gains a header; the README's
+wording is the one proposed; C001's record gains the dated note. The `dist` tree assertion and the
+changelog entry of the change set were approved with them.
+
 1. **A `NOTICE` file?** Apache-2.0 does not require one. Because `LICENSE` is the unmodified
    text, it names no copyright holder; the holder has to be stated somewhere.
    - (a) **Add `NOTICE`** — `agentmeter-collector` / `Copyright 2026 Alexander Rondon` — and ship
@@ -135,4 +140,38 @@ of the hash in a test would be a second place to keep it.
 - `.taskrail/bin/taskrail checks C006`: the `test` and `lint` checks, which are the five steps of
   `tests.yml`.
 
-Results are recorded here in the implement stage.
+### Results (2026-10-09)
+
+- **The text.** Fetched again before writing it: HTTP 200, 11358 bytes, the same SHA-256.
+  `cmp LICENSE <fetched file>` reports no difference; `sha256sum LICENSE` gives
+  `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30`.
+- **The packed file** (`pnpm pack`, 42 entries): the 38 files under `package/dist/`, and
+  `package/LICENSE`, `package/NOTICE`, `package/package.json`, `package/README.md`. The packed
+  `LICENSE` has the SHA-256 above; the packed manifest declares `"license": "Apache-2.0"`.
+- **The `dist` tree** (`scripts/write-dist-tree.mjs` on that file): `dist`, `LICENSE`, `NOTICE`,
+  `package.json`, `README.md`; the same hash and the same `license` field.
+- **Each new assertion was seen failing**, by a temporary edit undone afterwards, with
+  `node scripts/check-package.mjs` exiting 1 each time:
+
+  | Temporary edit | What the check printed (for the installed package and again for the dist tree) |
+  | --- | --- |
+  | `license` set to `MIT` | `declares "MIT", which is no licence this check knows the text of` |
+  | `license` removed | `declares undefined, which is no licence this check knows the text of` |
+  | One letter of `LICENSE` changed | `LICENSE is not the published text of Apache-2.0` |
+  | `LICENSE` replaced by the variant `detect-libc` ships | `LICENSE is not the published text of Apache-2.0` |
+  | `NOTICE` taken out of `files` | `the package is missing package/NOTICE`, then `has no NOTICE` twice |
+  | `NOTICE` naming another holder | `NOTICE does not carry the line "Copyright 2026 Alexander Rondon"` |
+
+  This also settles what the scope stage only inferred: the packer does not include a root
+  `NOTICE` by itself — `files` must name it.
+- **`.taskrail/bin/taskrail checks C006`**: `passed test`, `passed lint` — 19 test files, 406
+  tests, coverage 98.95% statements / 97.95% branches / 99.09% functions / 99.05% lines;
+  `check-package: ok — agentmeter-collector-0.2.0.tgz, 42 files`; "All matched files use Prettier
+  code style!"; the type check clean.
+
+## Documentation
+
+`README.md` and `CHANGELOG.md` are part of the change set above. The one document left that
+describes the licence is `CLAUDE.md`, which this task does not edit: its paragraph "The licence is
+the owner's open decision…" is false from this change on, and its replacement is with the owner.
+No follow-up task is opened.

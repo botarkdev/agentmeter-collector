@@ -255,3 +255,8 @@ Run from the repository root.
 and the ingestion contract types. The run outcome reports attribution as a count,
 `scan.turnsAttributed`, and as failures of the stage `attribution`. The scanning, queueing and transport internals are not part of
 this package's contract and may change without notice.
+
+## Licence
+
+Apache License, Version 2.0 — see [`LICENSE`](LICENSE). Copyright 2026 Alexander Rondon
+([`NOTICE`](NOTICE)).

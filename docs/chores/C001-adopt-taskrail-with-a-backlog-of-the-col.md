@@ -72,6 +72,9 @@ None open. Each choice above was approved before anything was edited.
 ## Out of scope
 
 - The licence, and publication to a package registry: both are still the owner's open decisions.
+  *Note, 2026-10-09: the licence has since been decided — Apache-2.0, task C006
+  ([its record](./C006-license-the-collector-under-apache-2-0.md)). Publication to a registry is
+  still open.*
 - Working any of C002 to C005.
 
 ## Verification
