@@ -48,18 +48,18 @@ want reported.
 is the built package:
 
 ```bash
-pnpm add -D github:botarkdev/agentmeter-collector#dist-v0.2.0
-npm install -D --allow-git=all github:botarkdev/agentmeter-collector#dist-v0.2.0
+pnpm add -D github:botarkdev/agentmeter-collector#dist-v0.3.0
+npm install -D --allow-git=all github:botarkdev/agentmeter-collector#dist-v0.3.0
 ```
 
-Name the `dist-` tag, never `v0.2.0` or `main`: those hold the sources, and a package manager
+Name the `dist-` tag, never `v0.3.0` or `main`: those hold the sources, and a package manager
 installing from git builds nothing.
 
 **By the address of the release's file:**
 
 ```bash
-pnpm add -D https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
-npm install -D --allow-remote=all https://github.com/botarkdev/agentmeter-collector/releases/download/v0.2.0/agentmeter-collector-0.2.0.tgz
+pnpm add -D https://github.com/botarkdev/agentmeter-collector/releases/download/v0.3.0/agentmeter-collector-0.3.0.tgz
+npm install -D --allow-remote=all https://github.com/botarkdev/agentmeter-collector/releases/download/v0.3.0/agentmeter-collector-0.3.0.tgz
 ```
 
 Either way the package is already built: installing it compiles nothing, runs no script and pulls
