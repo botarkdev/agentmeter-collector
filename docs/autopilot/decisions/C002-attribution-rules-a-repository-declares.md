@@ -62,3 +62,21 @@ Answered by the repository owner for O6 and O7.
 | P8 | The names? | `AGENTMETER_SOURCE` and `"from": "source"` · `AGENTMETER_SOURCE_NAME` · `"from": "environment"` | as recommended: **`AGENTMETER_SOURCE`, `"from": "source"`** | "environment" reads as any variable, which it must never be. |
 | P9 | An out-of-bounds value of the variable? | treated as not set and reported · truncated | as recommended: **not set, reported `invalid-setting`** | The existing rule for a bad setting; a truncated name is a wrong name. |
 | P10 | How is the dependency on the service's pinned document sequenced? | the service's change on a branch while the lane builds, the copy taken from that ref · wait for the service's merge | as recommended: **in parallel** | The orchestrator opens the task in the service's repository and names the ref; `source.commit` stays `null` until that change is on the service's `main`. |
+
+## implement gate
+
+Reviewed: the range `456f37a..f6d10bf`. Read by the orchestrator: `guardedMatch` in
+`src/attribution/attribution-rules.ts` (one fixed script, `pattern.exec(text)`, run in a `node:vm`
+context under a timeout; any error is a timeout, which switches the rules off), the place in
+`src/claude-code/usage-extraction.ts` where the recorded branch is handed to the attribution
+function as its single property and each returned dimension is rebuilt by name, and the whole diff
+of `CLAUDE.md`. Reported by the lane: 40 tests red before the code existed; four deliberate breaks
+of the enforcement, each going red and reverted; `lint`, the build and the package check passing;
+`test` failing in exactly three tests of the service-contract check, which pass in a throwaway
+copy once the fixture is the service's version 2. The fixture was not edited.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Is the implementation approved? | approve · amend | **approve** | It follows the approved plan; the three departures (one more closed detail code, `invalid-shape`; `turnsAttributed` counting measurements; a stray brace reported as `unknown-placeholder`) change no design. |
+| 2 | Does `CLAUDE.md`'s rule 2 keep the lane's addition that a new source a rule may read is the owner's decision? | keep · remove | **keep** | It is what the owner did with O2, written down; pointed out to the owner at hand-off, as every edit of that file is. |
+| 3 | Where is the service's version 2 copied from, and what is `source.commit`? | the service's task branch, `source.commit` null · wait for the merge | **the local branch `T184-name-the-attribution-dimensions-in-the-c` of the service's clone, path `apps/api/contracts/collector-ingest.json`, SHA-256 `398e7fab0b58a9712755edc31f93ff42838ee7bf846c662d6bb3a42761908bd6`; `source.commit` null** | The service's task T184 is closed on that branch and reviewed, not yet merged; the service squash-merges, so only the squash commit will exist on its `main`. |
