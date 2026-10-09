@@ -102,3 +102,9 @@ For the owner: the copy of the service's contract was taken from the service's t
 merged, so `source.commit` is null — merge T184 in the service first; if its document changes
 before it merges, this copy must be refreshed. A `source` rule may send the whole value of
 `AGENTMETER_SOURCE`, up to 128 characters (O8). Rule 2 of `CLAUDE.md` is reworded.
+
+## after the service's T184 merged
+
+The service's task T184 is on its `main` as `3cb9035`, and the document there is byte-identical to
+the fixture here (same `sha256`, checked by the orchestrator). `source.commit` in the provenance
+record, `null` until now as decided, is filled with that commit. Nothing else changes.
