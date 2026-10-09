@@ -302,3 +302,12 @@ Applied as approved, on 2026-10-09 (UTC). The change set did not grow.
   code style!"; `tsc --noEmit` silent.
 - **`src/`**: `git diff` of `src/contract/ingest-contract.ts` against the base shows comment
   lines only (13 added, 8 removed, in two blocks).
+
+## Documentation
+
+`CLAUDE.md`, three edits, as approved: rule 4 says how the contract is held and that the copy is
+never edited to make the test pass; the layout table has a `test/fixtures/` row; "Refreshing the
+contract copy" is the manual procedure. `README.md` is unchanged — it says nothing about how the
+contract is held. No follow-up task was opened. One step remains for whoever merges the service's
+T153: fill `source.commit` in the provenance record with the commit that holds the document on
+the service's `main`.
