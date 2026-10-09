@@ -19,16 +19,18 @@ owner, not an implementation detail. It was escalated, and the lane was stopped.
 
 | # | Question | Options | Decision | Reason |
 |---|---|---|---|---|
-| O1 | May the collector send `dimensions` at all, for a repository that committed a rule file? It amends rule 2 and reverses part of the design record, in a new decision document. | yes, as planned · no: the task and C003 are discarded or parked | *waiting for the owner* (the lane recommends yes) | |
-| O2 | What may a rule read? | the turn's recorded branch name only · also the working directory relative to the repository root | *waiting for the owner* (the lane recommends the branch only) | |
-| O3 | How much of the branch may a rule send? | whatever its named groups capture, up to 128 characters · additionally refuse a capture of the whole name until C003 exists | *waiting for the owner* (the lane recommends the first) | |
-| O4 | Which fields of a dimension are sent? | `type` and `key` only · also a constant `confidence` or `weight` from the file | *waiting for the owner* (the lane recommends `type` and `key`) | |
-| O5 | What does a turn matching no rule send? | no `dimensions` key · a built-in default dimension | *waiting for the owner* (the lane recommends no key) | |
-| S1 | The row says the file also declares "the granularity it reports at". Is granularity part of this task? | not in this task, no key · a `granularity` key whose only legal value is `event` · a task of its own | *waiting for the owner* (the lane recommends not here) | |
-| N1 | The file name `.agentmeter.json` and the `from`/`match`/`emit` rule shape follow the client-configuration sketch of the service's private architecture proposal. Is taking them into a public repository acceptable? | yes · choose other names | *waiting for the owner* | |
+| O1 | May the collector send `dimensions` at all, for a repository that committed a rule file? | yes, as planned · no | **yes** | The owner's answer. Rule 2 is amended in a new decision document; the design record is not edited. |
+| O2 | What may a rule read? | the turn's recorded branch name only · also the working directory | **the branch name; the session's name when the user gave it one; and a name set in an environment variable — not the working directory** | The owner's answer, in their words: the branch, and the session's name if it has one; not the directory, but an environment variable that names the source of the metrics, so that one token used in several folders can give each a different name and compare them. |
+| O2b | Which session name may leave the machine? | only a name the user set by hand · any name, generated titles included · left for a later task | **only a name the user set by hand** | The owner's answer. A title generated from what the user wrote is derived from content and never leaves. If a transcript cannot tell the two apart, none is sent and the owner is told. |
+| O3 | How much of the branch may a rule send? | whatever its named groups capture, up to 128 characters · never the whole name until C003 | **whatever its named groups capture** | The owner's answer. |
+| O4 | Which fields of a dimension are sent? | `type` and `key` only · also a constant `confidence` or `weight` | **`type` and `key` only** | The owner's answer. |
+| O5 | What does a turn matching no rule send? | no `dimensions` key · a built-in default dimension | **no `dimensions` key** | The owner's answer. |
+| S1 | Is granularity part of this task? | not in this task · a task of its own now · a key with one legal value | **not in this task**, and no key | The owner's answer. |
+| N1 | Are the file name `.agentmeter.json` and the `from`/`match`/`emit` rule shape used in the public repository? | yes · other names | **yes** | The owner's answer. |
 
-Not yet answered by anyone. When the owner answers, the answers are recorded here with who gave
-them.
+Answered by the repository owner, on 2026-10-09, to the orchestrator's questions. O2 widens the
+plan as written: two sources are added, so the plan is revised and reviewed again before anything
+is built.
 
 ## plan decisions the orchestrator would give, once the above are answered
 
