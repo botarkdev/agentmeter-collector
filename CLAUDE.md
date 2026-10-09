@@ -44,7 +44,14 @@ refactor; say so and stop.
    the payload it builds and re-validates nothing; `POST /api/v1/ingest` on the service decides
    what is valid. The collector sends no project and no user identity — both are the service's to
    derive from the token. The service does not know what a "spec" or a "task" is, and nothing here
-   should teach it.
+   should teach it. What the collector relies on of the endpoint is pinned by the service in one
+   document of its own; a byte-for-byte copy of it is held here,
+   `test/fixtures/collector-ingest.contract.json`, and
+   `test/unit/contract/service-contract.unit.test.ts` fails when the collector sends anything the
+   document does not name or reads an answer otherwise than it pins. The copy is evidence of what
+   the collector was checked against, never a second definition: nothing under `src/` reads it,
+   and **it is never edited to make that test pass** — a failure means the collector has departed
+   from the contract, or needs a change the service has not pinned yet.
 
 ## Key documents
 
@@ -86,6 +93,7 @@ only.
 | `src/cli/` | The `agentmeter` binary. `agentmeter.ts` is the bootstrap file and is not tested; everything it does lives in `run-cli.ts`. |
 | `src/index.ts` | The public surface. Anything not exported there may change without notice. |
 | `test/unit/` | Mirrors `src/`. |
+| `test/fixtures/` | The copy of the service's contract document and the record of where it came from (rule 4). Read by one test, never written by any, never packed. |
 
 **Commands**, from the repository root:
 
@@ -98,6 +106,18 @@ only.
 | `pnpm format:check` | Fails on a file Prettier would rewrite. `pnpm format` rewrites it. |
 | `pnpm build` | Removes `dist/` and compiles `src/` into it. `dist/` is the whole package: `package.json` ships nothing else. |
 | `pnpm check:package` | After a build: packs the collector as a release does, checks what is and is not in the file, installs it into an empty project with no network and runs the installed binary. The only check on the artefact — the unit suite imports `src/` and cannot see a package that ships without its binary. |
+
+**Refreshing the contract copy**: by hand, when the service raises its document's `version` —
+its repository is private and the tests use no network, so nothing here can fetch it. Replace
+`test/fixtures/collector-ingest.contract.json` with the service's
+`apps/api/contracts/collector-ingest.json`, byte for byte; in
+`test/fixtures/collector-ingest.contract.provenance.json` update `version`, `sha256` (the copy's
+own, which the test recomputes), `copiedOn` and `source.commit` — the commit on the service's
+`main` that holds that content, `null` while there is none yet; then make the collector agree
+with the document, in the same pull request. A field the collector is to start sending is named
+in the service's document first: added to `MEASUREMENT_ENTRY_FIELDS` alone, it fails the test.
+Before committing a refreshed copy, read every value in it: this repository is public, and the
+document is meant to hold shapes and invented example values only.
 
 **Backlog**: [`TASKRAIL.md`](TASKRAIL.md) is a [taskrail](https://github.com/botarkdev/taskrail)
 backlog, configured in `.taskrail/config.toml`. The CLI owns IDs and statuses: run it as

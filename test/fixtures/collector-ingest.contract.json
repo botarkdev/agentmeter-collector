@@ -1,0 +1,82 @@
+{
+  "contract": "collector-ingest",
+  "version": 1,
+  "description": "What the published collector sends to the ingestion endpoint and what it reads out of each answer. apps/api/test/unit/collector-ingest-contract.unit.test.ts holds the endpoint to it; see apps/api/README.md, \"The collector's ingestion contract\". Every value is a placeholder.",
+  "consumer": {
+    "repository": "botarkdev/agentmeter-collector",
+    "release": "v0.2.0",
+    "commit": "133b3217bb9a20403f21ce95c8ac06b9eb3474b1"
+  },
+  "request": {
+    "method": "POST",
+    "path": "/api/v1/ingest",
+    "headers": {
+      "authorization": "Bearer <ingest token>",
+      "content-type": "application/json"
+    },
+    "batchFields": ["agent", "measurements"],
+    "measurementFields": {
+      "always": ["idempotencyKey", "occurredAt", "model", "pricingTier", "tokens"],
+      "whenKnown": ["sessionId"]
+    },
+    "tokenFields": ["input", "output", "cacheWrite5m", "cacheWrite1h", "cacheRead"],
+    "examples": [
+      {
+        "agent": "claude-code",
+        "measurements": [
+          {
+            "idempotencyKey": "msg_placeholder_with_session",
+            "occurredAt": "2026-07-26T17:58:32.651Z",
+            "sessionId": "00000000-0000-4000-8000-000000000001",
+            "model": "claude-opus-5",
+            "pricingTier": "standard",
+            "tokens": {
+              "input": 2,
+              "output": 348,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 7028,
+              "cacheRead": 20628
+            }
+          }
+        ]
+      },
+      {
+        "agent": "claude-code",
+        "measurements": [
+          {
+            "idempotencyKey": "msg_placeholder_without_session",
+            "occurredAt": "2026-07-26T17:58:33.000Z",
+            "model": "claude-opus-5",
+            "pricingTier": "standard",
+            "tokens": {
+              "input": 1,
+              "output": 1,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "cacheRead": 0
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "accepted": {
+    "status": 200,
+    "integerFields": ["accepted", "deduplicated", "rejected"],
+    "example": {
+      "accepted": 1,
+      "deduplicated": 0,
+      "rejected": 0,
+      "cost": { "pricedUsd": "0.000000", "unpricedCount": 1 }
+    }
+  },
+  "refused": {
+    "bodyFields": ["code", "action"],
+    "actions": ["RETRY", "DO_NOT_RETRY", "FIX_AND_RETRY", "REAUTHENTICATE"],
+    "cases": {
+      "unauthenticated": { "status": 401, "action": "REAUTHENTICATE" },
+      "rateLimited": { "status": 429, "action": "RETRY", "header": "retry-after" },
+      "invalidRequest": { "status": 400, "action": "FIX_AND_RETRY" }
+    }
+  }
+}
