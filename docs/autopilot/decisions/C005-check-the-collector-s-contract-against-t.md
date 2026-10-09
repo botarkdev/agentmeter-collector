@@ -58,3 +58,9 @@ needed onto C001's branch.
 
 For the owner: `source.commit` in the provenance record is `null` until the service's task T153 is
 on its `main`; filling it is a one-line edit that changes neither the copy nor its hash.
+
+## rebase after C001 merged
+
+C001 was merged into `main` by a merge commit (`6076f48`). The branch was rebased onto
+`origin/main`. No conflict. After the rebase: no conflict markers, `taskrail checks C005` — `test`
+and `lint` passed — and `taskrail validate` — 0 errors.
