@@ -29,13 +29,19 @@ refactor; say so and stop.
    abandons what it has not finished. Whatever went wrong is reported as data in the run's
    outcome, which is the only channel it has.
 2. **It sends metrics, never content.** What leaves the machine is a fixed, declared set of fields:
-   an identifier, an instant, a session id, a model, a tier and five token counts. Nothing derived
-   from message content, tool input or output, file contents, file paths, the working directory or
-   the git branch is transmitted. This is enforced by an allowlist projection
-   (`src/contract/measurement-projection.ts`) and by a test that fails when it stops holding
+   an identifier, an instant, a session id, a model, a tier and five token counts — and, only for
+   a repository that committed attribution rules, `dimensions`: pairs of a `type` that is a
+   constant of that file and a `key` built from what the file's own patterns capture of the
+   turn's recorded branch name or of the name declared in `AGENTMETER_SOURCE`. Those two sources
+   are a closed set. Nothing derived from message content, tool input or output, file contents,
+   file paths, the working directory or a session's name or title is transmitted, and nothing of a
+   branch beyond what a committed rule captures. This is enforced by an allowlist projection
+   (`src/contract/measurement-projection.ts`), by the single-field input of the attribution
+   function, and by a test that fails when it stops holding
    (`test/unit/contract/content-safety.unit.test.ts`), never by a promise in a comment. A new field
-   on the wire is a decision for the owner, not an implementation detail. Reading a path to
-   decide which turns to report is allowed and is what the scope does; carrying one anywhere past
+   on the wire, **and a new source a rule may read**, is a decision for the owner, not an
+   implementation detail. Reading a path to decide which turns to report is allowed and is what
+   the scope does; carrying one, or a branch name, anywhere past
    `src/claude-code/usage-extraction.ts` is not.
 3. **It has zero runtime dependencies.** `package.json` has no `dependencies` and gains none: a
    hook that runs at the end of every session must install nothing and audit to nothing. Node's
@@ -60,6 +66,10 @@ refactor; say so and stop.
 - [`specs/repository-scope/decision.md`](specs/repository-scope/decision.md) — why a run reports
   only the repository it was started in, how it decides which turns those are, and why the queue
   and the cursor are per repository. It reverses one decision of the record below.
+- [`specs/attribution-rules/decision.md`](specs/attribution-rules/decision.md) — the amendment to
+  rule 2: what a repository's `.agentmeter.json` may declare, exactly what then leaves the
+  machine, why a session's name never does, and why the file is read fail-closed. It reverses
+  three statements of the record below.
 - [`specs/0019-claude-code-collector/`](specs/0019-claude-code-collector/) — the design record:
   the spec, the research decisions, and the two contracts (`contracts/ingest-submission.md`,
   `contracts/run-outcome.md`). Read `research.md` before changing how scanning, queueing or
@@ -85,11 +95,12 @@ only.
 | --- | --- |
 | `src/claude-code/` | The Claude Code adapter: finding transcripts, reading them, extracting usage. The only part that knows a transcript's format. |
 | `src/contract/` | The wire shape and the allowlist projection that builds it. |
+| `src/attribution/` | The rules a repository declares in `.agentmeter.json`: reading and validating the file, and the function that turns a branch name into dimensions. The only place that decides what a dimension can hold. |
 | `src/scope/` | Which repository a run belongs to, and which turns belong to that repository. Reads paths to decide; sends none. |
 | `src/queue/`, `src/cursor/` | The on-disk queue of undelivered batches and the scan cursor, one of each per repository. Both are disposable by design. |
 | `src/transport/` | The one HTTP call. |
 | `src/run/` | One run, end to end, and its outcome. |
-| `src/config/` | Configuration from the environment. |
+| `src/config/` | Configuration from the environment. Not the rule file: that is `src/attribution/`. |
 | `src/cli/` | The `agentmeter` binary. `agentmeter.ts` is the bootstrap file and is not tested; everything it does lives in `run-cli.ts`. |
 | `src/index.ts` | The public surface. Anything not exported there may change without notice. |
 | `test/unit/` | Mirrors `src/`. |
@@ -135,7 +146,10 @@ make a change pass.
 
 **Configuration**: every value comes from the environment (`README.md`, "Configuration"). No
 endpoint, token, host or port is committed to any file, as a default or as an example that could
-be mistaken for one. A tuning variable that is not valid falls back to its default and is reported
+be mistaken for one. The one file a repository commits for the collector, `.agentmeter.json`,
+holds attribution rules and nothing else (`README.md`, "Attribution"); it is read fail-closed —
+an unknown key invalidates the whole file — and that must stay so, because a later key may say a
+dimension is to be withheld. A tuning variable that is not valid falls back to its default and is reported
 as an `invalid-setting` failure naming the variable, never its value.
 
 **CI**: `.github/workflows/tests.yml` — formatting, types, the unit suite under coverage, the
@@ -162,8 +176,8 @@ is still missing. Nothing is published to a package registry.
 
 **Not here yet**: publication to a package registry — the package stays `private` so that it
 cannot be published to one by accident, and its name is not settled (`@agentmeter/collector` is a
-scope nobody has registered). Nor attribution rules a repository declares (`TASKRAIL.md` row
-`C002`), privacy controls (`C003`), or a second agent adapter (`C004`). What is left to do is in
+scope nobody has registered). Nor privacy controls over attribution — omitting or hashing a
+dimension — (`TASKRAIL.md` row `C003`), or a second agent adapter (`C004`). What is left to do is in
 [`TASKRAIL.md`](TASKRAIL.md).
 
 **The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
