@@ -1,7 +1,8 @@
 # C002 — Attribution rules a repository declares
 
-**Status**: plan, second revision, awaiting approval. Nothing but this document and its index row
-has been written.
+**Status**: plan approved (second revision, 2026-10-09); implemented, **except the refresh of the
+service's pinned contract copy**, which waits for version 2 of that document. See
+"Implementation" at the end.
 
 **This plan amends rule 2** ("It sends metrics, never content"), on the owner's decision of
 2026-10-09 (`docs/autopilot/decisions/C002-attribution-rules-a-repository-declares.md`): for a
@@ -584,3 +585,65 @@ first delivery's dimensions; and the key names of the pinned contract document, 
 held here as a copy. The file name `.agentmeter.json` and the `from` / `match` / `emit` shape
 follow the service's architecture proposal, with the owner's agreement (N1); nothing else of that
 document is reproduced.
+
+## Implementation
+
+Built as planned. Three things differ from the plan's wording, none from its design:
+
+- **One more closed code for an invalid file, `invalid-shape`**: a value of the wrong kind (a rule
+  list that is not a list, a rule with no pattern, an empty `type`). The plan's list had no code
+  for it.
+- **`scan.turnsAttributed` counts measurements**, after duplicate turns are collapsed, so it can
+  be compared with `scan.measurements`.
+- **A placeholder in a `type`, and a stray brace in a `key`, are reported as
+  `unknown-placeholder`.**
+
+### Waiting on the service's document
+
+`test/unit/contract/service-contract.unit.test.ts` fails in three tests, and only those, until
+`test/fixtures/collector-ingest.contract.json` is refreshed from version 2 of the service's
+document: "declares exactly the pinned measurement fields", "declares exactly the pinned dimension
+fields" and "sends, in every dimension of every example, exactly the pinned dimension fields". The
+copy was not touched. In a throwaway copy of the sources outside the repository, with the fixture
+changed exactly as "A dependency outside this repository" specifies, the whole suite passed
+(406 of 406). Criterion 20 is therefore written and not yet met.
+
+### Acceptance criteria and the tests that cover them
+
+Suites are under `test/unit/`; a name in quotes is a `describe` block.
+
+| # | Covered by |
+| --- | --- |
+| 1 | `run/run-collector` "attribution rules a repository declares": "sends exactly what it sent before for a repository that declares no rules" (with `AGENTMETER_SOURCE` set); `contract/content-safety` first block; `attribution/attribution-rules` "says a repository without the file has none". |
+| 2 | `attribution/attribution-rules` "buildAttributor: the branch"; `run/run-collector` "sends what a branch rule captures, on the turns it matches and on no other"; `contract/measurement-projection` "dimensions". |
+| 3 | `attribution/attribution-rules` "buildAttributor: the declared source name"; `run/run-collector` "sends the declared source name on every measurement…", "sends no name when none is declared, or when no source rule accepts it". |
+| 4 | `attribution/attribution-rules` "emits nothing for a branch no rule matches", "…for a turn that records no branch"; `claude-code/usage-extraction` "omits dimensions entirely when the rules gave the turn none"; `run/collect` "puts on each measurement what the rules derive…". |
+| 5 | `attribution/attribution-rules` "lets only the first matching rule emit…", "lets the first matching rule of EACH source emit, in the order the rules were written", "never matches a branch rule against the name…"; `run/run-collector` "carries a task from the branch and a name from the variable on the same turn". |
+| 6 | `attribution/attribution-rules` "drops an entry whose group took no part…", "…key comes out empty", "…longer than the limit", "sends an identical pair once", "caps what one measurement carries". |
+| 7 | `attribution/attribution-rules` "parseAttributionRules: fail closed" (every case, each with its code); `run/run-collector` "submits without dimensions, and says why, when the file …" (three cases); `contract/content-safety` "what no rule can be made to send". |
+| 8 | `attribution/attribution-rules` "reports something at that path that is not a file as unreadable", "reports a file that is there and cannot be read as unreadable"; `run/run-collector` "submits without dimensions, and says so, when the file cannot be read". |
+| 9 | `attribution/attribution-rules` "guardedMatch: interrupts a pattern that backtracks without bound…", "a pattern that does not answer in time" (both); `run/run-collector` "switches the rules off when a pattern does not answer in time, and reports it once", "is not held by a committed pattern that backtracks without bound". None asserts on elapsed time. |
+| 10 | `config/collector-config` "the declared source name" (all). |
+| 11 | Every `run/run-collector` test named under 7–9 awaits `runCollector` and reads its outcome; "does not raise, and still submits, when loading the rules raises"; `cli/run-cli` "returns 0 even when everything about the run went wrong" (unchanged). |
+| 12 | `run/run-collector` "reads no rule file and sends no dimension when the scope is the machine". |
+| 13 | `contract/content-safety` "a rule that captures a part of the branch", "a rule that deliberately captures the whole branch". |
+| 14 | `contract/content-safety` "a session's name and its generated title never leave" (three events, three rule sets). |
+| 15 | `run/run-collector` "lets no configuration value but the declared source name reach a dimension". |
+| 16 | `contract/content-safety` "has exactly the allowlisted fields and no others" (without), "has exactly the allowlisted fields, dimensions among them, and no others" (with); `contract/measurement-projection` "dimensions". |
+| 17 | `contract/content-safety` "carries the branch no further than extraction…", "hands a rule nothing of the event but the branch", "rebuilds a dimension by name…"; `claude-code/usage-extraction` "attribution". |
+| 18 | `run/collect` "counts the measurements that carry a dimension"; `cli/run-cli` "says how many measurements carry a dimension…"; `run/run-collector` "reports counts and codes only: no branch, no name and no dimension in the outcome"; `config/collector-config` "…names the variable, never the value". |
+| 19 | `run/run-collector` "keeps the dimensions in a retained batch and delivers them with it on a later run". |
+| 20 | `contract/service-contract` — **red until the copy is refreshed** (above). |
+| 21 | `package.json` has no `dependencies`; `pnpm format:check`, `pnpm typecheck`, `pnpm build` and `pnpm check:package` pass; `pnpm test:cov` fails on criterion 20's three tests only (coverage with them failing: 98.95% statements, 97.95% branches, thresholds unchanged). |
+
+### Seen failing first
+
+The new suites were run before the code they test existed (40 failing tests in 8 files). The
+enforcement was then checked the other way, by breaking it on purpose and restoring it:
+
+| Change made on purpose | Tests that went red |
+| --- | --- |
+| Extraction hands the rule the working directory beside the branch | "hands a rule nothing of the event but the branch"; "hands the attribution function the branch the turn records, and nothing else"; "hands it no branch at all for a turn that records none…" |
+| Extraction and the projection pass dimension objects through instead of rebuilding them | "rebuilds a dimension by name…"; "builds new objects rather than passing the turn's own through" |
+| The extracted turn carries the branch | "carries the branch no further than extraction…"; "carries the dimensions it was given on the turn, and never the branch they came from" |
+| The parser accepts a third source, `session` | "refuses a rule file whose rule reads \"session\"…"; "refuses a rule that reads \"session\"…"; "submits without dimensions, and says why, when the file names a source it does not know" |
