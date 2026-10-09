@@ -1,0 +1,43 @@
+version = "v0.4.0"            # the wrapper runs exactly this release; anyone with `uv` can
+
+[[backlog]]
+name = "main"
+prefix = "C"                  # C###: a T### in this repository's comments and design record is the service's
+file = "TASKRAIL.md"          # the default; taskrail never takes a name the repository already uses
+mainline = "main"
+artifacts = "docs"
+
+[columns]
+custom = []
+# aliases = { Pts = "Size" }   # core column -> this repository's header for it
+
+[points]
+scale = [1, 2, 3, 5, 8, 13]
+
+[git]
+worktree = "required"        # "required": one worktree per task; "never": a branch in this checkout
+worktree_dir = ".worktrees"
+push_task_branch = true      # `taskrail review --publish` pushes the task branch
+claim_remote = ""            # e.g. "origin" to also claim across machines
+
+[review]                     # hand-off after a task is closed
+remote = "origin"            # fallback for a mainline without branch.<mainline>.remote
+fetch = true
+rebase = true                # rebase onto the further-ahead of the local and remote mainline
+provider = "auto"            # auto | github | gitlab | gitea | forgejo | none
+web_url = ""                 # web address of a self-hosted git host, e.g. "https://git.example.com"
+url_template = ""            # for other hosts: {web_url} {repo} {base} {head} {title} {body}
+scope = ""                   # default Conventional Commits scope of pull request titles
+
+[checks]                     # the five steps of .github/workflows/tests.yml, under the two names the kinds' stages run
+test = "pnpm test:cov && pnpm build && pnpm check:package"
+lint = "pnpm format:check && pnpm typecheck"
+
+[autopilot]                  # `taskrail autopilot`; taskrail's DESIGN.md §12 has every key
+enabled = true               # until this is set, `autopilot start` refuses; the skill installs anyway
+# max_lanes = 3              # lanes in use at once
+# read_first = []            # documents the orchestrator answers lane gates from first
+governing = ["LICENSE", "specs/0019-claude-code-collector"]   # a lane that touches one of these escalates to the human
+# escalate_gates = []        # "kind:stage" always taken to the human, e.g. "spike:decide"
+notify = "node scripts/telegram-notify.mjs"   # the message arrives on stdin
+notify_on = ["escalation", "lane-done"]
