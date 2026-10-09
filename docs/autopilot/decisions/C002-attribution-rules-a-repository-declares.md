@@ -80,3 +80,25 @@ copy once the fixture is the service's version 2. The fixture was not edited.
 | 1 | Is the implementation approved? | approve · amend | **approve** | It follows the approved plan; the three departures (one more closed detail code, `invalid-shape`; `turnsAttributed` counting measurements; a stray brace reported as `unknown-placeholder`) change no design. |
 | 2 | Does `CLAUDE.md`'s rule 2 keep the lane's addition that a new source a rule may read is the owner's decision? | keep · remove | **keep** | It is what the owner did with O2, written down; pointed out to the owner at hand-off, as every edit of that file is. |
 | 3 | Where is the service's version 2 copied from, and what is `source.commit`? | the service's task branch, `source.commit` null · wait for the merge | **the local branch `T184-name-the-attribution-dimensions-in-the-c` of the service's clone, path `apps/api/contracts/collector-ingest.json`, SHA-256 `398e7fab0b58a9712755edc31f93ff42838ee7bf846c662d6bb3a42761908bd6`; `source.commit` null** | The service's task T184 is closed on that branch and reviewed, not yet merged; the service squash-merges, so only the squash commit will exist on its `main`. |
+
+## close
+
+Reviewed: the range `0e75b35..927dd17` — the contract copy refreshed to the service's version 2
+(its SHA-256 recomputed by the orchestrator and equal to the one named at the implement gate), the
+provenance record, the record of the verify stage, and the status change committed on its own. The
+lane ran the built binary in a throwaway repository with an emptied environment and read the
+queued request bodies: dimensions as the rules declare them, none under an invalid file, a
+runaway pattern or no file, and nothing sent anywhere. Re-run by the orchestrator: `taskrail
+checks C002` — `test` and `lint` passed; `taskrail validate` — 0 errors. `version` in
+`package.json` is unchanged.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Is the close approved? | approve · hold | **approve** | The plan the owner approved is built, enforced by tests seen failing, and exercised in the built binary. |
+| 2 | Which pull request title? | the generated one · `feat(C002:attribution): send the dimensions a repository declares in committed attribution rules` | **the lane's** | New behaviour on the wire, breaking nothing: a repository without the file sends what it sent before. |
+| 3 | Is the version raised in this pull request? | a separate release pull request · here | **left to the owner; not raised here** | This repository releases when `version` rises, and its instructions make a release one pull request of its own. |
+
+For the owner: the copy of the service's contract was taken from the service's task T184 before it
+merged, so `source.commit` is null — merge T184 in the service first; if its document changes
+before it merges, this copy must be refreshed. A `source` rule may send the whole value of
+`AGENTMETER_SOURCE`, up to 128 characters (O8). Rule 2 of `CLAUDE.md` is reworded.
