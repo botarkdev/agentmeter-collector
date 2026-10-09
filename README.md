@@ -256,6 +256,10 @@ and the ingestion contract types. The run outcome reports attribution as a count
 `scan.turnsAttributed`, and as failures of the stage `attribution`. The scanning, queueing and transport internals are not part of
 this package's contract and may change without notice.
 
+## Security
+
+How to report a vulnerability privately is in [`SECURITY.md`](SECURITY.md).
+
 ## Licence
 
 Apache License, Version 2.0 — see [`LICENSE`](LICENSE). Copyright 2026 Alexander Rondon

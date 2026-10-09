@@ -35,3 +35,17 @@ check reported it for the installed package and for the `dist` tree.
 | # | Question | Options | Decision | Reason |
 |---|---|---|---|---|
 | 1 | Commit? | one commit · split · change first | **one commit** | The evidence above. |
+
+## after the close: two additions the owner asked for
+
+On 2026-10-09 the owner, asked what other metadata a public package should carry, approved two
+additions to this branch: a `description` in `package.json`, and `SECURITY.md` with a pointer
+from the README. `SECURITY.md` sends reports to the repository's private vulnerability reporting,
+which the owner switches on in the repository's settings; it names no address. Checks re-run by
+the orchestrator after the change: `taskrail checks C006` — passed, the package still 42 files
+(`SECURITY.md` is not shipped in it).
+
+The owner also approved the two replacement paragraphs for `CLAUDE.md`. They are not in this
+branch: the orchestrator's edit of that file was refused by the session's permission check, and
+it was not attempted another way. The file still says the licence is an open decision until the
+owner applies the text or allows the edit.
