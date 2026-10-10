@@ -11,6 +11,18 @@ they were written there, and the pull request numbers in them are that repositor
 
 ## [Unreleased]
 
+### Added
+
+- **A repository can withhold or hash what its attribution rules capture.** A version 2
+  `.agentmeter.json` says on every `emit` entry how its key leaves the machine: `"send": "plain"`,
+  `"hashed"` (a digest salted with the file's `hashSalt`, sent as `hashed:` and 32 hexadecimal
+  characters) or `"omitted"`. There is no default: an entry that does not say invalidates the
+  file. A version 1 file is read exactly as before. A collector older than this one refuses a
+  version 2 file and sends no dimensions for it. `README.md`, "Withholding or hashing a key";
+  `specs/attribution-privacy/decision.md`.
+- The reasons `undeclared-treatment` and `invalid-hash-salt` for an `attribution` /
+  `invalid-rules` failure.
+
 ## 0.3.0 — 2026-10-09
 
 ### Added

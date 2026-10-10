@@ -1,9 +1,15 @@
 import { stat } from "node:fs/promises";
-import type { Attributor, LoadedRules, RuleMatcher } from "../attribution/attribution-rules.js";
+import type {
+  Attributor,
+  KeyDigest,
+  LoadedRules,
+  RuleMatcher,
+} from "../attribution/attribution-rules.js";
 import {
   buildAttributor,
   guardedMatch,
   loadAttributionRules,
+  saltedDigest,
 } from "../attribution/attribution-rules.js";
 import { listTranscriptFiles } from "../claude-code/transcript-locations.js";
 import { readTranscriptLines } from "../claude-code/transcript-reader.js";
@@ -48,6 +54,8 @@ export interface RunDependencies {
   readonly loadRules: (repositoryRoot: string) => Promise<LoadedRules>;
   /** One bounded match of a committed pattern. */
   readonly matchRule: RuleMatcher;
+  /** The digest of a key a rule file says is sent hashed. Absent: the collector's own. */
+  readonly digestKey?: KeyDigest;
 }
 
 /**
@@ -127,11 +135,10 @@ async function prepareAttribution(
     outcome.fail("attribution", loaded.reason, loaded.detail);
     return undefined;
   }
+  const options = { matcher: deps.matchRule, digest: deps.digestKey ?? saltedDigest };
   return buildAttributor(
     loaded.rules,
-    config.sourceName === undefined
-      ? { matcher: deps.matchRule }
-      : { source: config.sourceName, matcher: deps.matchRule },
+    config.sourceName === undefined ? options : { ...options, source: config.sourceName },
   );
 }
 

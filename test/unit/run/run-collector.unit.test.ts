@@ -1,7 +1,13 @@
+import { createHmac } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { ATTRIBUTION_FILE, guardedMatch } from "../../../src/attribution/attribution-rules.js";
+import {
+  ATTRIBUTION_FILE,
+  RULE_SOURCES,
+  TREATMENTS,
+  guardedMatch,
+} from "../../../src/attribution/attribution-rules.js";
 import { summarise } from "../../../src/cli/run-cli.js";
 import { resolveConfigFromEnv, type ResolvedConfig } from "../../../src/config/collector-config.js";
 import type { IngestBatch } from "../../../src/contract/ingest-contract.js";
@@ -10,7 +16,12 @@ import { FileBatchQueue, type BatchQueue } from "../../../src/queue/batch-queue.
 import { cursorPath, queueDirectory } from "../../../src/queue/queue-paths.js";
 import { runCollector, type RunDependencies } from "../../../src/run/run-collector.js";
 import type { DeliveryOutcome, IngestTransport } from "../../../src/transport/ingest-transport.js";
-import { assistantTurn, makeTempDir, writeTranscript } from "../support/transcripts.js";
+import {
+  MARKER_HASH_SALT,
+  assistantTurn,
+  makeTempDir,
+  writeTranscript,
+} from "../support/transcripts.js";
 
 const TOKEN = "amk_live_placeholder_token_that_must_not_leak";
 
@@ -987,5 +998,253 @@ describe("runCollector: attribution rules a repository declares", () => {
       expect(reported).not.toContain(private_);
     }
     expect(summarise(outcome)).toContain("attributed 3");
+  });
+});
+
+/**
+ * A whole run, for a repository whose file says how each key is sent
+ * (specs/attribution-privacy/decision.md). The unit suites hold what a treatment computes; this
+ * holds where a withheld value could still end up once a run has everything in its hands: the
+ * request, the file the queue writes, the outcome, the printed line, the process's own streams.
+ */
+describe("runCollector: a key the repository's file says is hashed or omitted", () => {
+  const PLAIN = {
+    branch: "MARKER-PLAIN-BRANCH-NAME",
+    source: "marker-plain-source-name",
+  } as const;
+  const TYPE = "label";
+
+  function fileOf(from: string, send: unknown, extra: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+      version: 2,
+      hashSalt: MARKER_HASH_SALT,
+      attribution: [{ from, match: "^(?<all>.+)$", emit: [{ type: TYPE, key: "{all}", send }] }],
+      ...extra,
+    });
+  }
+
+  async function repository(file: string) {
+    const h = await harness({ AGENTMETER_SCOPE: "repository", AGENTMETER_SOURCE: PLAIN.source });
+    const root = join(await makeTempDir(), "widgets");
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, ATTRIBUTION_FILE), file, "utf8");
+    await writeTranscript(join(h.transcriptsDir, "sessions"), "s.jsonl", [
+      assistantTurn({ messageId: "msg_a", cwd: root, gitBranch: PLAIN.branch }),
+      assistantTurn({ messageId: "msg_b", cwd: root, gitBranch: PLAIN.branch }),
+    ]);
+    return { ...h, root, scope: { repositoryRoot: async () => root } };
+  }
+
+  /** Every byte under a directory, as one text. */
+  async function everythingUnder(directory: string): Promise<string> {
+    let text = "";
+    for (const entry of await readdir(directory, { withFileTypes: true, recursive: true })) {
+      text += ` ${entry.name}`;
+      if (entry.isFile()) {
+        text += ` ${await readFile(join(entry.parentPath, entry.name), "utf8")}`;
+      }
+    }
+    return text;
+  }
+
+  /** Runs `body` and returns everything it wrote to the process's streams or the console. */
+  async function capturingOutput(body: () => Promise<void>): Promise<string> {
+    const written: unknown[] = [];
+    const record = (...args: unknown[]): boolean => {
+      written.push(...args);
+      return true;
+    };
+    const spies = [
+      vi.spyOn(process.stdout, "write").mockImplementation(record),
+      vi.spyOn(process.stderr, "write").mockImplementation(record),
+      ...(["log", "info", "warn", "error", "debug", "trace"] as const).map((method) =>
+        vi.spyOn(console, method).mockImplementation(record),
+      ),
+    ];
+    try {
+      await body();
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+    return written.map((item) => String(item)).join(" ");
+  }
+
+  function digestOf(plain: string): string {
+    const hex = createHmac("sha256", MARKER_HASH_SALT)
+      .update(JSON.stringify([TYPE, plain]))
+      .digest("hex");
+    return `hashed:${hex.slice(0, 32)}`;
+  }
+
+  const withheld = RULE_SOURCES.flatMap((from) =>
+    TREATMENTS.filter((send) => send !== "plain").map((send) => [from, send] as const),
+  );
+
+  it.each(withheld)(
+    "leaves the plain value of the %s nowhere when it is sent %s: not in the queued file, the request, the outcome, the printed line or the process's output",
+    async (from, send) => {
+      const r = await repository(fileOf(from, send));
+      const plain = PLAIN[from];
+      const transport = transportOf(ACCEPT_ALL);
+      let reported = "";
+
+      const output = await capturingOutput(async () => {
+        // First with the service out of reach, so that the batch stays on disk to be read.
+        const retained = await runCollector(
+          r.resolved,
+          { transport: transportOf(() => UNREACHABLE) },
+          r.scope,
+        );
+        reported += `${JSON.stringify(retained)} ${summarise(retained)}`;
+        reported += await everythingUnder(r.cacheDir);
+        const delivered = await runCollector(r.resolved, { transport }, r.scope);
+        reported += `${JSON.stringify(delivered)} ${summarise(delivered)}`;
+        reported += await everythingUnder(r.cacheDir);
+      });
+      const everything = `${reported} ${JSON.stringify(transport.delivered)} ${output}`;
+
+      const sent = transport.delivered.flatMap((batch) => batch.measurements);
+      expect(sent).toHaveLength(2);
+      for (const entry of sent) {
+        expect(entry.dimensions).toEqual(
+          send === "hashed" ? [{ type: TYPE, key: digestOf(plain) }] : undefined,
+        );
+      }
+      // The queued file was read: it is where the request body sat between the two runs.
+      expect(reported).toContain("msg_a");
+      expect(everything).not.toContain(plain);
+      expect(everything.toLowerCase()).not.toContain(plain.toLowerCase());
+      expect(everything).not.toContain(MARKER_HASH_SALT);
+    },
+  );
+
+  it.each([
+    [
+      "an entry that does not say how its key is sent",
+      fileOf("branch", undefined),
+      "undeclared-treatment",
+    ],
+    ["a treatment it does not know", fileOf("branch", "encrypted"), "undeclared-treatment"],
+    [
+      "a hashed entry and no salt",
+      JSON.stringify({ ...JSON.parse(fileOf("branch", "hashed")), hashSalt: undefined }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt that is too short",
+      fileOf("branch", "hashed", { hashSalt: "MARKER_SHORT_SALT" }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt outside its alphabet",
+      fileOf("branch", "hashed", { hashSalt: "MARKER SALT WITH SPACES 0123456789 abcdefghij" }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a version 1 file that names a treatment",
+      JSON.stringify({
+        ...JSON.parse(fileOf("branch", "hashed")),
+        version: 1,
+        hashSalt: undefined,
+      }),
+      "unknown-key",
+    ],
+    [
+      "a version 1 file that holds a salt",
+      JSON.stringify({ version: 1, hashSalt: MARKER_HASH_SALT, attribution: [] }),
+      "unknown-key",
+    ],
+    [
+      "a version it does not know",
+      JSON.stringify({ version: 3, attribution: [] }),
+      "unsupported-version",
+    ],
+  ])(
+    "sends no dimension at all, still submits, and names only the check, for %s",
+    async (_name, file, detail) => {
+      const r = await repository(file);
+      const transport = transportOf(ACCEPT_ALL);
+      let outcomeText = "";
+
+      const output = await capturingOutput(async () => {
+        const outcome = await runCollector(r.resolved, { transport }, r.scope);
+        outcomeText = `${JSON.stringify(outcome)} ${summarise(outcome)}`;
+        expect(outcome.failures).toEqual([
+          { stage: "attribution", reason: "invalid-rules", count: 1, detail },
+        ]);
+        expect(outcome.delivery.accepted).toBe(2);
+      });
+
+      const sent = transport.delivered.flatMap((batch) => batch.measurements);
+      expect(sent).toHaveLength(2);
+      for (const entry of sent) {
+        expect(entry).not.toHaveProperty("dimensions");
+      }
+      const everything = `${outcomeText} ${JSON.stringify(transport.delivered)} ${output} ${await everythingUnder(r.cacheDir)}`;
+      for (const private_ of [PLAIN.branch, PLAIN.source, MARKER_HASH_SALT, "MARKER"]) {
+        expect(everything).not.toContain(private_);
+      }
+    },
+  );
+
+  it("drops a hashed entry, sends the rest and does not raise, when computing the digest raises", async () => {
+    const file = JSON.stringify({
+      version: 2,
+      hashSalt: MARKER_HASH_SALT,
+      attribution: [
+        {
+          from: "branch",
+          match: "^(?<all>.+)$",
+          emit: [
+            { type: TYPE, key: "{all}", send: "hashed" },
+            { type: "kind", key: "feature", send: "plain" },
+          ],
+        },
+      ],
+    });
+    const r = await repository(file);
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(
+      r.resolved,
+      {
+        transport,
+        digestKey: () => {
+          throw new Error("MARKER_DIGEST_ERROR");
+        },
+      },
+      r.scope,
+    );
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.dimensions)).toEqual([
+      [{ type: "kind", key: "feature" }],
+      [{ type: "kind", key: "feature" }],
+    ]);
+    expect(outcome.delivery.accepted).toBe(2);
+    const everything = `${JSON.stringify(outcome)} ${summarise(outcome)} ${JSON.stringify(transport.delivered)}`;
+    expect(everything).not.toContain(PLAIN.branch);
+    expect(everything).not.toContain("MARKER");
+  });
+
+  it("sends a version 1 file's keys exactly as before, beside a repository that moved to version 2", async () => {
+    const r = await repository(
+      JSON.stringify({
+        version: 1,
+        attribution: [
+          { from: "branch", match: "^(?<all>.+)$", emit: [{ type: TYPE, key: "{all}" }] },
+        ],
+      }),
+    );
+    const transport = transportOf(ACCEPT_ALL);
+
+    const outcome = await runCollector(r.resolved, { transport }, r.scope);
+
+    const sent = transport.delivered.flatMap((batch) => batch.measurements);
+    expect(sent.map((entry) => entry.dimensions)).toEqual([
+      [{ type: TYPE, key: PLAIN.branch }],
+      [{ type: TYPE, key: PLAIN.branch }],
+    ]);
+    expect(outcome.failures).toEqual([]);
   });
 });

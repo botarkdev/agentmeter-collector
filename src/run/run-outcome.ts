@@ -50,8 +50,8 @@ export interface SkipRecord {
 /**
  * `detail` carries a code the SERVICE supplied (an error `code` from the documented error
  * contract, or a stated wait in seconds), the name of a setting, or the code of the check a rule
- * file failed — never a path, a URL, a token, a branch, a pattern, a dimension, or anything read
- * from a transcript. Identical records merge and carry a count, so a directory
+ * file failed — never a path, a URL, a token, a branch, a pattern, a dimension, a salt, or
+ * anything read from a transcript. Identical records merge and carry a count, so a directory
  * of a thousand unreadable files produces one record rather than a thousand.
  */
 export interface FailureRecord {

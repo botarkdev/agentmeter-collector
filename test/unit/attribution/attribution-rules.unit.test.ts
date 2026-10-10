@@ -1,15 +1,19 @@
+import { createHmac } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   ATTRIBUTION_FILE,
   ATTRIBUTION_LIMITS,
+  HASHED_PREFIX,
+  TREATMENTS,
   buildAttributor,
   guardedMatch,
   loadAttributionRules,
   parseAttributionRules,
   readRulesFile,
   type AttributionRule,
+  type AttributorOptions,
   type RuleMatcher,
   type RulesInvalidCode,
 } from "../../../src/attribution/attribution-rules.js";
@@ -66,7 +70,7 @@ describe("parseAttributionRules: fail closed", () => {
     ["a file with no version", JSON.stringify({ attribution: [] }), "unsupported-version"],
     [
       "a version it does not know",
-      JSON.stringify({ version: 2, attribution: [] }),
+      JSON.stringify({ version: 3, attribution: [] }),
       "unsupported-version",
     ],
     ["a file with no rule list", JSON.stringify({ version: 1 }), "invalid-shape"],
@@ -500,5 +504,327 @@ describe("readRulesFile and loadAttributionRules", () => {
     });
 
     expect(loaded).toEqual({ kind: "failed", reason: "unreadable-rules" });
+  });
+});
+
+/**
+ * Version 2 of the file (specs/attribution-privacy/decision.md): every `emit` entry says how its
+ * key leaves the machine. The salt below is invented, like every name in this file.
+ */
+const SALT = "invented-salt-for-tests-0123456789abcdef";
+const OTHER_SALT = "another-invented-salt-0123456789abcdefgh";
+
+function fileV2(attribution: unknown, extra: Record<string, unknown> = { hashSalt: SALT }): string {
+  return JSON.stringify({ version: 2, attribution, ...extra });
+}
+
+function rulesV2(
+  attribution: unknown,
+  extra?: Record<string, unknown>,
+): readonly AttributionRule[] {
+  const parsed = parseAttributionRules(fileV2(attribution, extra));
+  if (parsed.kind !== "rules") {
+    throw new Error(`fixture rules must be valid, got ${parsed.code}`);
+  }
+  return parsed.rules;
+}
+
+function wholeBranch(send: unknown, type = "work"): Record<string, unknown> {
+  return { from: "branch", match: "^(?<all>.+)$", emit: [{ type, key: "{all}", send }] };
+}
+
+function underV2(attribution: unknown, branch: string, options: AttributorOptions = {}) {
+  return buildAttributor(rulesV2(attribution), options).attribute({ branch });
+}
+
+/** What the collector is meant to compute, computed here without it. */
+function expectedDigest(salt: string, type: string, key: string): string {
+  const hex = createHmac("sha256", salt)
+    .update(JSON.stringify([type, key]))
+    .digest("hex");
+  return `hashed:${hex.slice(0, 32)}`;
+}
+
+describe("version 2: every entry says how its key is sent", () => {
+  it("knows exactly three treatments", () => {
+    expect([...TREATMENTS]).toEqual(["plain", "hashed", "omitted"]);
+    expect(HASHED_PREFIX).toBe("hashed:");
+  });
+
+  it.each([...TREATMENTS])("accepts an entry that says %j", (send) => {
+    expect(parseAttributionRules(fileV2([wholeBranch(send)])).kind).toBe("rules");
+  });
+
+  it("sends a key as built when the entry says plain", () => {
+    expect(underV2([wholeBranch("plain")], "K123-add-export")).toEqual([
+      { type: "work", key: "K123-add-export" },
+    ]);
+  });
+
+  it("still reads a version 1 file as it always did: every key as built", () => {
+    const rules = rulesOf([TASK_RULE]);
+    expect(buildAttributor(rules).attribute({ branch: "K123-add-export" })).toEqual([
+      { type: "task", key: "K123" },
+    ]);
+  });
+});
+
+describe("version 2: a hashed key", () => {
+  it("sends the prefix and 32 hexadecimal characters, and nothing of the key", () => {
+    const [dimension] = underV2([wholeBranch("hashed")], "K123-add-export");
+
+    expect(dimension?.type).toBe("work");
+    expect(dimension?.key).toMatch(/^hashed:[0-9a-f]{32}$/);
+    expect(JSON.stringify(dimension)).not.toContain("K123");
+    expect(JSON.stringify(dimension)).not.toContain("add-export");
+  });
+
+  it("is the salted HMAC-SHA-256 of the type and the key, computed here independently", () => {
+    expect(underV2([wholeBranch("hashed")], "K123-add-export")).toEqual([
+      { type: "work", key: expectedDigest(SALT, "work", "K123-add-export") },
+    ]);
+  });
+
+  it("hashes the key as built from the template, literal text included", () => {
+    const rule = {
+      from: "branch",
+      match: "^(?<task>[A-Z][0-9]{3})-",
+      emit: [{ type: "task", key: "task/{task}", send: "hashed" }],
+    };
+    expect(underV2([rule], "K123-add-export")).toEqual([
+      { type: "task", key: expectedDigest(SALT, "task", "task/K123") },
+    ]);
+  });
+
+  it("gives the same value from two attributors built separately, so two machines agree", () => {
+    const first = underV2([wholeBranch("hashed")], "K123-add-export");
+    const second = underV2([wholeBranch("hashed")], "K123-add-export");
+    expect(first).toEqual(second);
+  });
+
+  it("gives another value under another salt, another type or another key", () => {
+    const base = underV2([wholeBranch("hashed")], "K123-add-export")[0]?.key;
+    const otherSalt = buildAttributor(
+      rulesV2([wholeBranch("hashed")], { hashSalt: OTHER_SALT }),
+    ).attribute({ branch: "K123-add-export" })[0]?.key;
+    const otherType = underV2([wholeBranch("hashed", "piece")], "K123-add-export")[0]?.key;
+    const otherKey = underV2([wholeBranch("hashed")], "K124-add-export")[0]?.key;
+
+    expect(new Set([base, otherSalt, otherType, otherKey]).size).toBe(4);
+  });
+
+  it("hashes a declared source name the same way", () => {
+    const rule = {
+      from: "source",
+      match: "^(?<name>.+)$",
+      emit: [{ type: "checkout", key: "{name}", send: "hashed" }],
+    };
+    const state = buildAttributor(rulesV2([rule]), { source: "laptop-a" });
+    expect(state.attribute({})).toEqual([
+      { type: "checkout", key: expectedDigest(SALT, "checkout", "laptop-a") },
+    ]);
+  });
+
+  it("drops the entry, and returns nothing of the key, when computing the digest raises", () => {
+    const rule = {
+      from: "branch",
+      match: "^(?<all>.+)$",
+      emit: [
+        { type: "work", key: "{all}", send: "hashed" },
+        { type: "kind", key: "feature", send: "plain" },
+      ],
+    };
+    const dimensions = underV2([rule], "K123-add-export", {
+      digest: () => {
+        throw new Error("no digest today");
+      },
+    });
+
+    expect(dimensions).toEqual([{ type: "kind", key: "feature" }]);
+  });
+
+  it.each([
+    ["the key itself", (_salt: string, _type: string, key: string) => key],
+    ["too few characters", () => "abc123"],
+    ["something that is not hexadecimal", () => "Z".repeat(32)],
+    ["nothing", () => ""],
+  ])("drops the entry when the digest function answers with %s", (_name, digest) => {
+    expect(underV2([wholeBranch("hashed")], "K123-add-export", { digest })).toEqual([]);
+  });
+});
+
+describe("version 2: an omitted key", () => {
+  it("emits no dimension", () => {
+    expect(underV2([wholeBranch("omitted")], "K123-add-export")).toEqual([]);
+  });
+
+  it("leaves the rule's other entries alone", () => {
+    const rule = {
+      from: "branch",
+      match: "^(?<task>[A-Z][0-9]{3})-(?<rest>.+)$",
+      emit: [
+        { type: "task", key: "{task}", send: "plain" },
+        { type: "work", key: "{rest}", send: "omitted" },
+      ],
+    };
+    expect(underV2([rule], "K123-add-export")).toEqual([{ type: "task", key: "K123" }]);
+  });
+
+  it("still makes its rule the first match of its source, shadowing a later one", () => {
+    const later = {
+      from: "branch",
+      match: "^(?<task>[A-Z][0-9]{3})-",
+      emit: [{ type: "task", key: "{task}", send: "plain" }],
+    };
+    expect(underV2([wholeBranch("omitted"), later], "K123-add-export")).toEqual([]);
+  });
+});
+
+describe("version 2: the prefix of a digest is nobody else's", () => {
+  const rule = {
+    from: "branch",
+    match: "^(?<all>.+)$",
+    emit: [
+      { type: "work", key: "{all}", send: "plain" },
+      { type: "kind", key: "feature", send: "plain" },
+    ],
+  };
+
+  it("drops a plain key that begins with the prefix, and sends the rule's other entries", () => {
+    expect(underV2([rule], "hashed:0123456789abcdef0123456789abcdef")).toEqual([
+      { type: "kind", key: "feature" },
+    ]);
+  });
+
+  it("does not change what a version 1 file sends for the same branch", () => {
+    const v1 = { from: "branch", match: "^(?<all>.+)$", emit: [{ type: "work", key: "{all}" }] };
+    expect(buildAttributor(rulesOf([v1])).attribute({ branch: "hashed:abc" })).toEqual([
+      { type: "work", key: "hashed:abc" },
+    ]);
+  });
+});
+
+describe("version 2: an entry is dropped for the same reasons under every treatment", () => {
+  const optional = (send: string) => ({
+    from: "branch",
+    match: "^(?<a>zzz)?(?<b>.*)$",
+    emit: [
+      { type: "absent", key: "{a}", send },
+      { type: "kept", key: "constant", send: "plain" },
+    ],
+  });
+
+  it.each([...TREATMENTS])("a group that took no part, under %j", (send) => {
+    expect(underV2([optional(send)], "K123")).toEqual([{ type: "kept", key: "constant" }]);
+  });
+
+  it.each([...TREATMENTS])("a key that comes out empty, under %j", (send) => {
+    const rule = {
+      from: "branch",
+      match: "^(?<a>x*)",
+      emit: [{ type: "empty", key: "{a}", send }],
+    };
+    expect(underV2([rule], "K123")).toEqual([]);
+  });
+
+  it.each([...TREATMENTS])("a key longer than the limit before treatment, under %j", (send) => {
+    const long = "a".repeat(ATTRIBUTION_LIMITS.keyLength + 1);
+    expect(underV2([wholeBranch(send)], long)).toEqual([]);
+  });
+});
+
+describe("version 2: fail closed", () => {
+  const plainEntry = { type: "work", key: "{all}", send: "plain" };
+  const rule = (emit: unknown) => ({ from: "branch", match: "^(?<all>.+)$", emit: [emit] });
+
+  it.each<[string, string, RulesInvalidCode]>([
+    [
+      "an entry that does not say how its key is sent",
+      fileV2([rule({ type: "work", key: "{all}" })]),
+      "undeclared-treatment",
+    ],
+    ["a treatment it does not know", fileV2([wholeBranch("encrypted")]), "undeclared-treatment"],
+    ["a treatment in another case", fileV2([wholeBranch("Plain")]), "undeclared-treatment"],
+    ["a treatment that is not a word", fileV2([wholeBranch(true)]), "undeclared-treatment"],
+    ["an empty treatment", fileV2([wholeBranch("")]), "undeclared-treatment"],
+    [
+      "one entry without a treatment among entries that have one",
+      fileV2([
+        {
+          from: "branch",
+          match: "^(?<all>.+)$",
+          emit: [plainEntry, { type: "more", key: "{all}" }],
+        },
+      ]),
+      "undeclared-treatment",
+    ],
+    ["a hashed entry and no salt", fileV2([wholeBranch("hashed")], {}), "invalid-hash-salt"],
+    [
+      "a salt one character too short",
+      fileV2([wholeBranch("hashed")], { hashSalt: "a".repeat(31) }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt one character too long",
+      fileV2([wholeBranch("hashed")], { hashSalt: "a".repeat(129) }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt holding a character outside its alphabet",
+      fileV2([wholeBranch("hashed")], { hashSalt: `${"a".repeat(40)} b` }),
+      "invalid-hash-salt",
+    ],
+    [
+      "the placeholder a document shows where a salt goes",
+      fileV2([wholeBranch("hashed")], { hashSalt: "<generate one: 32 to 128 characters>" }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt that is not text",
+      fileV2([wholeBranch("hashed")], { hashSalt: 12345678901234567890123456789012 }),
+      "invalid-hash-salt",
+    ],
+    [
+      "a salt that is not valid, even when no entry is hashed",
+      fileV2([wholeBranch("plain")], { hashSalt: "short" }),
+      "invalid-hash-salt",
+    ],
+    [
+      "an unknown key beside the salt",
+      fileV2([], { hashSalt: SALT, hashKey: SALT }),
+      "unknown-key",
+    ],
+    ["an unknown key in an entry", fileV2([rule({ ...plainEntry, hash: true })]), "unknown-key"],
+    ["a version 1 file whose entry names a treatment", fileOf([rule(plainEntry)]), "unknown-key"],
+    ["a version 1 file that holds a salt", fileOf([], { hashSalt: SALT }), "unknown-key"],
+    [
+      "a later version",
+      JSON.stringify({ version: 3, hashSalt: SALT, attribution: [] }),
+      "unknown-key",
+    ],
+  ])("refuses %s", (_name, text, code) => {
+    expect(invalidCode(text)).toBe(code);
+  });
+
+  it.each([32, 128])("accepts a salt of %i characters", (length) => {
+    expect(invalidCode(fileV2([wholeBranch("hashed")], { hashSalt: "a".repeat(length) }))).toBe(
+      "valid",
+    );
+  });
+
+  it("accepts a file with no salt when no entry is hashed", () => {
+    expect(invalidCode(fileV2([wholeBranch("plain"), wholeBranch("omitted")], {}))).toBe("valid");
+  });
+
+  it("still applies every check of a version 1 file", () => {
+    expect(invalidCode(fileV2([{ ...wholeBranch("plain"), from: "cwd" }]))).toBe("unknown-source");
+    expect(invalidCode(fileV2([{ ...wholeBranch("plain"), match: "(" }]))).toBe("invalid-pattern");
+    expect(
+      invalidCode(
+        fileV2([
+          { from: "branch", match: "^(?<a>.+)$", emit: [{ type: "t", key: "{b}", send: "plain" }] },
+        ]),
+      ),
+    ).toBe("unknown-placeholder");
   });
 });

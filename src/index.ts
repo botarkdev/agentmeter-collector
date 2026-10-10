@@ -9,9 +9,10 @@
  *   transcript, full disk — is data in the returned outcome.
  * - Only counters and identifiers leave the machine, plus — for a repository that committed
  *   attribution rules — what those rules capture of a branch name or of a name the user declared
- *   (`specs/attribution-rules/decision.md`). Nothing derived from message content, file contents,
- *   paths or a session's name is transmitted, and that is enforced by construction rather than by
- *   convention.
+ *   (`specs/attribution-rules/decision.md`), as a digest or not at all when that repository's
+ *   file says so (`specs/attribution-privacy/decision.md`). Nothing derived from message
+ *   content, file contents, paths or a session's name is transmitted, and that is enforced by
+ *   construction rather than by convention.
  *
  * Only what a caller needs is exported. The scanning, queueing and transport internals are not
  * part of this package's contract and may change without notice.
