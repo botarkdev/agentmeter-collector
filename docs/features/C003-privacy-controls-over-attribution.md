@@ -429,6 +429,28 @@ reverted:
 | A third source is added to the exported set | the same |
 | † The plain key and the salt are written to the console and the standard error stream | 4: the whole runs of 9 |
 
+## Verification
+
+The built binary (`dist/cli/agentmeter.js`, `agentmeter push`) was run in a throwaway repository
+under a temporary directory: a `.git` directory, a `.agentmeter.json`, and a transcripts
+directory holding only invented events — a `custom-title` event and two turns recorded in that
+repository, one on `K123-add-export` and one on `main`. The environment was emptied and set by
+hand: a loopback address on a port nothing listens on, a placeholder token, the temporary
+directories, `AGENTMETER_SOURCE=laptop-a`. Nothing left the machine; each run's request body was
+read from its queue, and the whole cache directory was searched for the plain values. Everything
+was removed afterwards. The invented salt and the digests it gave are not reproduced here.
+
+| Run | Printed | Queued request body |
+| --- | --- | --- |
+| Version 2: `task` plain, the rest of the branch `hashed`, the source `omitted` | `found 2 · … · queued 1 · attributed 1 · transport:unreachable 1`, exit 0 | The task turn: `[{task, K123}, {work, hashed:<32 hex>}]`, the digest equal to an HMAC computed apart from the collector. The `main` turn: the six fields, no `dimensions`. Under the cache directory: `add-export` 0 times, `laptop-a` 0, the salt 0, the token 0, content 0. |
+| The same, the source `hashed` | `… attributed 2 …`, exit 0 | The task turn gains `{checkout, hashed:<32 hex>}`, and the `main` turn carries that one alone; equal to the HMAC computed apart. `laptop-a` 0 times, the salt 0. |
+| One entry without `send` | `… attribution:invalid-rules 1 …`, exit 0 | Both turns, each with exactly the six fields. No `K123`, no `add-export`, no salt. |
+| `hashed` and no salt | `… attribution:invalid-rules 1 …`, exit 0 | The same. |
+| A version 1 file | `… attributed 1 …`, exit 0 | The task turn carries `[{task, K123}]`, as 0.3.0 sent it. |
+
+The behaviour is the plan's. Not exercised: a delivery the service accepts, since a check sends
+nothing anywhere.
+
 ## Proposed text for `CLAUDE.md`
 
 This task does not edit `CLAUDE.md`; row C008 carries the change. Four places:
