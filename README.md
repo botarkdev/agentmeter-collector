@@ -27,7 +27,8 @@ fails if it stops holding, not by a promise in a comment.
 **One more field is sent only if your repository asks for it.** A repository that commits
 attribution rules has a seventh field, `dimensions`, sent with each measurement: what those rules
 capture of a branch name, or of a name you declared in `AGENTMETER_SOURCE`. Without that file
-nothing about your branch is read. See [Attribution](#attribution).
+nothing about your branch is read. The file can also say that a captured value is sent only as a
+digest, or not at all. See [Attribution](#attribution).
 
 **It reports the repository it runs in, and no other.** Your machine holds the transcripts of
 every repository you work in, and one ingest token names one project. A run started in a
@@ -193,17 +194,79 @@ no rule file, it does nothing. The rule's pattern is also where a repository say
 accepts: `^(?<name>laptop-a|laptop-b|ci)$` sends nothing for a misspelt one. A name describes the
 run that reports: every turn that run collects carries it.
 
-**The file is read strictly.** Its only keys are `version` (which must be `1`) and `attribution`;
-a rule's are `from`, `match` and `emit`; a dimension's are `type` and `key`. An unknown key
-anywhere, an unknown source, a pattern that does not compile, a `{placeholder}` that names no
-group of its pattern, or a limit exceeded makes the whole file invalid — and an invalid file means
-**no dimensions are sent at all**, never some of them. The endpoint and the token are not keys of
+### Withholding or hashing a key
+
+A branch name describes how a repository is organised. A **version 2** file says, on every `emit`
+entry, how its key leaves your machine:
+
+```json
+{
+  "version": 2,
+  "hashSalt": "<generate one: 32 to 128 characters>",
+  "attribution": [
+    {
+      "from": "branch",
+      "match": "^(?<task>[A-Z][0-9]{3})-(?<rest>.+)$",
+      "emit": [
+        { "type": "task", "key": "{task}", "send": "plain" },
+        { "type": "work", "key": "{rest}", "send": "hashed" }
+      ]
+    },
+    {
+      "from": "source",
+      "match": "^(?<name>[a-z0-9-]+)$",
+      "emit": [{ "type": "checkout", "key": "{name}", "send": "omitted" }]
+    }
+  ]
+}
+```
+
+| `send` | What is sent |
+| --- | --- |
+| `"plain"` | The key as built. |
+| `"hashed"` | `hashed:` and 32 hexadecimal characters — a digest of the type and the key, salted with the file's `hashSalt`. The key itself is not sent, queued, printed or reported. |
+| `"omitted"` | Nothing: the entry emits no dimension. Its rule still counts as the first match of its source. |
+
+With that file a turn on `K123-add-export` is sent with `{ "type": "task", "key": "K123" }` and
+`{ "type": "work", "key": "hashed:…" }`, and with no `checkout` dimension.
+
+- **`send` is required on every entry of a version 2 file.** There is no default treatment. An
+  entry that does not say, or says another word, makes the whole file invalid, so a dimension
+  added later cannot be sent in clear because nobody thought about it.
+- **A version 1 file is read as it always was**: every key as built. `send` and `hashSalt` are not
+  keys of a version 1 file.
+- **The same key gives the same digest on every machine** that reads the same file, so the service
+  still groups by it. Changing the salt, or an entry's `type`, starts a new series there; so does
+  moving a key from `plain` to `hashed`, and what was already delivered plain stays as delivered.
+- **`hashSalt`** is 32 to 128 characters of `A–Z`, `a–z`, `0–9`, `_` and `-`, required when any
+  entry says `hashed`. `openssl rand -hex 32` makes one. The line in the example above is not a
+  legal value on purpose.
+- A plain key that would begin with `hashed:` is not sent, so in what a version 2 file sends that
+  prefix always marks a digest. The `type` is always sent as written.
+- Collector 0.3.0 does not know version 2: it refuses the file and sends no dimensions. Move a
+  repository's file to version 2 when every contributor's collector knows it.
+
+**What a digest does and does not do.** It stops someone who reads the service's data, and cannot
+read your repository, from learning the name. **It protects nothing from anyone who can read the
+repository**: the salt is committed beside the rules, and with it a guessed name is confirmed at
+once — branch names and task ids are easy to guess. **In a public repository it protects nothing
+at all**; use `omitted` there. A digest is not anonymity: it still says that two measurements
+belong to the same thing.
+
+**The file is read strictly.** Its only keys are `version` (`1` or `2`) and `attribution`, and in
+version 2 `hashSalt`; a rule's are `from`, `match` and `emit`; a dimension's are `type` and `key`,
+and in version 2 `send`. An unknown key anywhere, an unknown source, a pattern that does not
+compile, a `{placeholder}` that names no group of its pattern, an entry of a version 2 file that
+does not say how its key is sent, a salt that is missing or out of bounds, or a limit exceeded
+makes the whole file invalid — and an invalid file means **no dimensions are sent at all**, never
+some of them. The endpoint and the token are not keys of
 this file. Limits: 64 KiB, 32 rules, 512 characters per pattern, 64 per `type`, 128 per `key`
 template, 16 dimensions per measurement; a branch name longer than 255 characters is not matched.
 
 **It still cannot fail your session, and it never holds back your token counts.** With a file that
 is invalid or cannot be read, the run submits its measurements without dimensions and reports an
-`attribution` failure naming the check that failed — never the file's content. A pattern that takes
+`attribution` failure naming the check that failed (`undeclared-treatment` and `invalid-hash-salt`
+are the two of version 2) — never the file's content, a key or the salt. A pattern that takes
 longer than 50 ms to answer is interrupted, and the rules are switched off for the rest of that
 run, which is reported as `attribution:rule-timeout`.
 
@@ -217,7 +280,9 @@ run, which is reported as `attribution:rule-timeout`.
 - **A run with `AGENTMETER_SCOPE=machine` reads no rule file** and sends no dimension.
 
 See [`specs/attribution-rules/decision.md`](specs/attribution-rules/decision.md) for what was
-decided and why, including why a session's name is never sent.
+decided and why, including why a session's name is never sent, and
+[`specs/attribution-privacy/decision.md`](specs/attribution-privacy/decision.md) for how a key is
+withheld or hashed.
 
 ## What it puts on your disk
 

@@ -1,10 +1,16 @@
 # C003 — Privacy controls over attribution
 
-**Status**: plan written, waiting at the plan gate. Nothing is built.
+**Status**: plan answered at its gate on 2026-10-10
+(`docs/autopilot/decisions/C003-privacy-controls-over-attribution.md`); implemented. See
+"Implementation" at the end.
 
-**Three of the decisions below are the owner's, not the plan's** (D1, D4 and D9): each changes
-what a published release sends by default, or where a secret-like value lives. They are marked
-`[owner]`. The plan gives a recommendation for each and builds none of them until answered.
+**Three of the decisions below were marked as the owner's** (D1, D4 and D9): each changes what a
+published release sends by default, or where a salt lives. The owner was away; the orchestrating
+agent took them so that the work could be built and read whole, and they are the owner's to
+confirm or reverse before a release. **D4 was answered with one change: the committed value is a
+salt, named `hashSalt`, not a key** — the text below was written before that answer and still
+says `hashKey` and `invalid-hash-key`. **The names as built are `hashSalt` and
+`invalid-hash-salt`.**
 
 ## What is sent today
 
@@ -328,3 +334,122 @@ the workflows.
 - **Verification in the real runtime** (the next stage) ran, for C002, against an endpoint under
   the reserved `.invalid` domain. That still asks a resolver for a name. This task would use a
   loopback address with nothing listening, so that nothing leaves the machine at all.
+
+## Implementation
+
+Built as the plan gate answered: D1 option C, D4 option H3 as a **salt**, the rest as
+recommended.
+
+**Names as built.** The file's key is `hashSalt`; the failure code is `invalid-hash-salt`. No
+document, comment, code or test title calls it a key, a secret or a credential.
+
+**Where it is.** All of it is in `src/attribution/attribution-rules.ts`: the two versions of the
+file (`VERSION_1`, `VERSION_2`), `treatmentOf`, `hashSaltOf`, `saltedDigest` and `treated` — the
+one function that turns a plain key into what is sent. `src/run/run-collector.ts` gained one
+optional injected dependency, `digestKey`, so that a digest that raises can be shown through a whole run.
+Extraction, the projection, the contract types, the configuration, the queue, the transport and
+`test/fixtures/` did not change.
+
+**Four things differ from the plan's wording:**
+
+- **The reserved prefix holds for version 2 files only.** The plan said a plain key beginning
+  with `hashed:` is dropped. Applied to a version 1 file that would change what 0.3.0 sent for
+  it, which D1 rules out; so a version 1 key is sent as it always was, and a test holds both
+  halves.
+- **A salt that is present and out of bounds invalidates the file even when no entry is
+  hashed.** The plan only said it is required when one is. A file is not half read.
+- **A digest that does not come back as 32 hexadecimal characters is dropped**, beside one that
+  raises. The digest function is injectable; whatever is put there cannot hand the key back.
+- **`agentmeter push`'s line is checked through `summarise`** on the outcome of a whole run, in
+  the run suite. `test/unit/cli/run-cli.unit.test.ts` was not changed.
+
+**The service accepts a hashed key.** D7 left one thing unverified from this side. The
+orchestrating agent checked the service's source: a dimension's key is any text of 1 to 256
+characters, so `hashed:` and 32 hexadecimal characters is accepted. Nothing in the ingestion
+contract changed.
+
+**One existing test was modified**: in `test/unit/attribution/attribution-rules.unit.test.ts`,
+the row "a version it does not know" used `version: 2` as its example of an unknown version; it
+now uses `3`. Nothing else of the existing suites changed; the two shared helpers gained exports
+(`MARKER_SOURCE_NAME`, `MARKER_HASH_SALT` in `test/unit/support/transcripts.ts`).
+
+### Acceptance criteria and the tests that cover them
+
+Suites are under `test/unit/`; a name in quotes is a `describe` block or a test.
+
+| # | Covered by |
+| --- | --- |
+| 1 | Every test that existed before this task passes, one row of one table changed (above). `attribution/attribution-rules` "still reads a version 1 file as it always did"; `run/run-collector` "sends a version 1 file's keys exactly as before…". |
+| 2 | `attribution/attribution-rules` "sends a key as built when the entry says plain"; `contract/content-safety` "every source under every treatment", the two `plain` cases. |
+| 3 | `attribution/attribution-rules` "version 2: a hashed key" (the prefix and 32 characters; the HMAC computed in the test; the template's literal text; two attributors agree; another salt, type or key; a declared source name); `contract/content-safety`, the two `hashed` cases. |
+| 4 | `attribution/attribution-rules` "version 2: an omitted key" (three tests); `contract/content-safety`, the two `omitted` cases, which also hold that the entry has no `dimensions` key. |
+| 5 | `attribution/attribution-rules` "version 2: fail closed" (eighteen refusals, each with its code; the bounds 32 and 128 accepted); `run/run-collector` "sends no dimension at all, still submits, and names only the check, for …" (eight files). |
+| 6 | `attribution/attribution-rules` "version 2: the prefix of a digest is nobody else's". |
+| 7 | `attribution/attribution-rules` "version 2: an entry is dropped for the same reasons under every treatment" (three reasons by three treatments). |
+| 8 | `attribution/attribution-rules` "drops the entry, and returns nothing of the key, when computing the digest raises", "drops the entry when the digest function answers with …" (four); `run/run-collector` "drops a hashed entry, sends the rest and does not raise…". |
+| 9 | `contract/content-safety` "sends the plain value once when the file says plain, and nowhere otherwise" (the turn and the serialised batch, both sources, three treatments); `run/run-collector` "leaves the plain value of the … nowhere when it is sent …" (both sources, `hashed` and `omitted`: the queued file read between two runs, the request, both outcomes, both printed lines, the process's two streams and the console). |
+| 10 | `contract/content-safety` "never sends the salt, nor carries it on the turn"; `run/run-collector`, the tests of 9 and of 5, which hold the salt — valid, too short, or outside its alphabet — out of the request, the cache directory, the outcome, the printed line and the process's output. |
+| 11 | `contract/content-safety` "has a case for every source a rule can read and every treatment an entry can name"; its two tables are typed by the exported sets, so `pnpm typecheck` fails as well. |
+| 12 | `contract/content-safety` "has exactly the allowlisted fields, whatever the treatment"; `test/fixtures/`, `contract/service-contract` and `contract/measurement-projection` are unchanged. |
+| 13 | Every `run/run-collector` test named under 5 and 8 awaits `runCollector` and reads its outcome; `cli/run-cli` "returns 0 even when everything about the run went wrong" (unchanged). |
+| 14 | `package.json`, the lockfile and the thresholds are unchanged; the checks' output is in the implement gate's report. |
+
+### Seen failing first, and checked by mutation
+
+The new tests were written before the code. Run against the sources with only the new exported
+names added and no behaviour, 53 tests failed and the content-safety file did not load. **Five new
+tests passed at that point** and so were not seen failing then: the two whole-run `omitted` cases
+(a refused file and an omitted key both send no dimension) and three whole-run refusals that hold
+behaviour 0.3.0 already had (a version 1 file naming a treatment, one holding a salt, an unknown
+version). The first two are covered by the mutations marked †.
+
+Each of the following was then made in `src/attribution/attribution-rules.ts`, seen red, and
+reverted:
+
+| Change made on purpose | Tests that went red |
+| --- | --- |
+| An entry with no `send` is read as `plain` | 3: the two refusals of an undeclared treatment; the whole run for it |
+| An unknown treatment word is read as `plain` | 5: the four refusals of a word; the whole run for it |
+| A digest that raises falls back to the plain key | 2: the unit test and the whole run |
+| Whatever the digest function answers is sent | 4: "drops the entry when the digest function answers with …" |
+| `hashed` with no salt falls back to an unsalted digest | 2: the refusal and the whole run |
+| † An omitted entry emits its plain key | 11, in three suites |
+| A hashed entry emits its plain key | 15, in three suites |
+| The reserved-prefix check is removed | 1 |
+| The salt is put in the failure's detail | 8: every refusal of a salt, and the whole runs for them |
+| The salt travels in the hashed key | 10, in three suites |
+| A version 1 file accepts `send` and a salt | 5 |
+| A version 1 file loses keys that begin with the prefix | 1 |
+| A salt of any length is accepted | 3 |
+| A salt of any character is accepted | 3 |
+| The digest is not salted | 8 |
+| The digest ignores the type | 8 |
+| A hashed key skips the checks every other treatment has | 3 |
+| A fourth treatment is added to the exported set | the content-safety file does not load, 5 tests fail, and `pnpm typecheck` fails in the source and in the suite |
+| A third source is added to the exported set | the same |
+| † The plain key and the salt are written to the console and the standard error stream | 4: the whole runs of 9 |
+
+## Proposed text for `CLAUDE.md`
+
+This task does not edit `CLAUDE.md`; row C008 carries the change. Four places:
+
+1. **Rule 2**, after "Those two sources are a closed set.": *"A version 2 file says on every entry
+   whether its key is sent as built, as a salted digest, or not at all
+   (`specs/attribution-privacy/decision.md`); there is no default, and the treatment is applied
+   in `src/attribution/` before a dimension exists."*
+2. **Key documents**, a new entry after the attribution rules':
+   *"[`specs/attribution-privacy/decision.md`](specs/attribution-privacy/decision.md) — how a
+   repository says a captured key is sent plain, hashed or omitted; what the digest is; what the
+   committed salt does and does not protect from; and why an entry that does not say invalidates
+   the file."*
+3. **Configuration**, replacing "holds attribution rules and nothing else (`README.md`,
+   "Attribution"); it is read fail-closed — an unknown key invalidates the whole file — and that
+   must stay so, because a later key may say a dimension is to be withheld.":
+   *"holds attribution rules, how each key they build is sent, and the salt of the keys sent
+   hashed — and nothing else (`README.md`, "Attribution"). The salt is not a credential: it
+   protects nothing from a reader of the repository. The file is read fail-closed — an unknown
+   key, or a version 2 entry that does not say how its key is sent, invalidates the whole file —
+   and that must stay so: it is what keeps a key from being sent in clear by omission."*
+4. **Not here yet**: remove "Nor privacy controls over attribution — omitting or hashing a
+   dimension — (`TASKRAIL.md` row `C003`), or a second agent adapter (`C004`)." and write
+   *"Nor a second agent adapter (`TASKRAIL.md` row `C004`)."*
