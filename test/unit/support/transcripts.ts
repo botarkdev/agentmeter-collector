@@ -111,6 +111,14 @@ export const MARKER_BRANCH_TASK = "K123";
 /** The branch the marker event records: something a rule can capture a part of, then the marker. */
 export const MARKER_BRANCH = `${MARKER_BRANCH_TASK}-${MARKERS.branch}`;
 
+/** A declared source name (`AGENTMETER_SOURCE`) that is a marker: it may leave the machine only
+ * as a rule's treatment says. */
+export const MARKER_SOURCE_NAME = "MARKER_DECLARED_SOURCE_NAME";
+
+/** A salt a version 2 rule file can hold — within its bounds, and a marker: it must never leave
+ * the machine or be reported, whatever the file says. Invented; it salts nothing real. */
+export const MARKER_HASH_SALT = "MARKER_HASH_SALT_0123456789_abcdefghijkl";
+
 export function markerTranscriptEvent(): Record<string, unknown> {
   return {
     type: "assistant",

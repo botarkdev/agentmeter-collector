@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Script, createContext } from "node:vm";
@@ -23,6 +24,14 @@ import { Script, createContext } from "node:vm";
  * an invalid file means no dimensions at all. A key added by a later version, such as one that
  * says a dimension must be hashed, is therefore never ignored by this one.
  *
+ * **How a key leaves the machine is decided here too** (specs/attribution-privacy/decision.md). A
+ * version 2 file says, on every `emit` entry, whether its key is sent `plain`, `hashed` or
+ * `omitted`; there is no default to fall back to, so an entry that does not say invalidates the
+ * file. The treatment is applied in the one function that turns a match into a dimension, before
+ * a dimension exists as a value: a key that is hashed or omitted never reaches a turn, a request,
+ * the queue or a report in its plain form. A version 1 file has no treatments and is read exactly
+ * as it always was.
+ *
  * Nothing here throws, and nothing here can hold a run: a committed pattern can backtrack without
  * bound, so every match goes through `guardedMatch`, which interrupts it.
  */
@@ -41,6 +50,10 @@ export const ATTRIBUTION_LIMITS = {
   inputLength: 255,
   dimensionsPerMeasurement: 16,
   matchTimeoutMs: 50,
+  hashSaltMinLength: 32,
+  hashSaltMaxLength: 128,
+  /** Hexadecimal characters of a digest that are sent: its first 128 bits. */
+  digestLength: 32,
 } as const;
 
 /** One dimension of a turn: a word of the repository's file, and a key its rule built. */
@@ -70,18 +83,46 @@ export type RulesInvalidCode =
   | "unknown-source"
   | "invalid-pattern"
   | "unknown-placeholder"
-  | "limit-exceeded";
+  | "limit-exceeded"
+  | "undeclared-treatment"
+  | "invalid-hash-salt";
 
-export type RuleSource = "branch" | "source";
+/** Everything a rule can read. Closed, and exported so that a test can hold a case for each. */
+export const RULE_SOURCES = ["branch", "source"] as const;
+
+export type RuleSource = (typeof RULE_SOURCES)[number];
+
+/** How a key leaves the machine. Closed, and exported for the same reason. */
+export const TREATMENTS = ["plain", "hashed", "omitted"] as const;
+
+export type Treatment = (typeof TREATMENTS)[number];
+
+/** What a hashed key begins with. Nothing else a version 2 file sends begins with it. */
+export const HASHED_PREFIX = "hashed:";
+
+/** A salt, a type and a key in; hexadecimal out. */
+export type KeyDigest = (salt: string, type: string, key: string) => string;
 
 /** A key template, split: literal text, and the names of the groups that go between. */
 type KeyPart =
   | { readonly kind: "text"; readonly text: string }
   | { readonly kind: "group"; readonly name: string };
 
+/**
+ * What an entry's treatment compiles to. `reservesPrefix` is false only for an entry of a version
+ * 1 file, whose keys are sent exactly as that version always sent them. A hashed entry holds the
+ * file's salt, so nothing has to carry it anywhere else.
+ */
+type EmitTreatment =
+  | { readonly kind: "plain"; readonly reservesPrefix: boolean }
+  | { readonly kind: "hashed"; readonly salt: string }
+  | { readonly kind: "omitted" };
+
 interface RuleEmit {
   readonly type: string;
   readonly key: readonly KeyPart[];
+  /** Required: there is no way to compile an entry without saying how its key is sent. */
+  readonly treatment: EmitTreatment;
 }
 
 export interface AttributionRule {
@@ -144,10 +185,43 @@ export const guardedMatch: RuleMatcher = (pattern, text) => {
   }
 };
 
-const FILE_KEYS = ["version", "attribution"];
 const RULE_KEYS = ["from", "match", "emit"];
-const EMIT_KEYS = ["type", "key"];
-const SOURCES: readonly RuleSource[] = ["branch", "source"];
+const HASH_SALT = /^[A-Za-z0-9_-]+$/;
+const DIGEST = new RegExp(`^[0-9a-f]{${ATTRIBUTION_LIMITS.digestLength}}$`);
+
+/** What differs between the two versions of the file: its keys, an entry's keys, and whether an
+ * entry says how its key is sent. Everything else is checked identically. */
+interface FileVersion {
+  readonly fileKeys: readonly string[];
+  readonly emitKeys: readonly string[];
+  readonly declaresTreatment: boolean;
+}
+
+const VERSION_1: FileVersion = {
+  fileKeys: ["version", "attribution"],
+  emitKeys: ["type", "key"],
+  declaresTreatment: false,
+};
+const VERSION_2: FileVersion = {
+  fileKeys: ["version", "attribution", "hashSalt"],
+  emitKeys: ["type", "key", "send"],
+  declaresTreatment: true,
+};
+
+/**
+ * The digest of a key: HMAC-SHA-256 with the file's salt, over the JSON text of the pair — so a
+ * type and a key cannot be re-split into another pair, and one text under two types does not show
+ * as one value — cut to its first 128 bits.
+ *
+ * The salt is committed with the rules, so every checkout computes the same value and the service
+ * can still group by it. It is not a credential: whoever reads the repository can confirm a
+ * guessed name. What it stops is a reader of the service's data who cannot read the repository.
+ */
+export const saltedDigest: KeyDigest = (salt, type, key) =>
+  createHmac("sha256", salt)
+    .update(JSON.stringify([type, key]))
+    .digest("hex")
+    .slice(0, ATTRIBUTION_LIMITS.digestLength);
 const PLACEHOLDER = /\{([A-Za-z_$][A-Za-z0-9_$]*)\}/g;
 
 /** Thrown and caught inside this module only: the one way out of a nested validation. */
@@ -233,23 +307,70 @@ function keyPartsOf(template: string, groupNames: readonly string[]): readonly K
   return parts;
 }
 
-function emitOf(value: unknown, groupNames: readonly string[]): RuleEmit {
-  const record = recordOf(value, EMIT_KEYS);
+/** The file's salt, or nothing when it holds none. A salt that is there and not usable invalidates
+ * the file whether or not an entry asks for it: a file is not half read. */
+function hashSaltOf(value: unknown): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (
+    typeof value !== "string" ||
+    value.length < ATTRIBUTION_LIMITS.hashSaltMinLength ||
+    value.length > ATTRIBUTION_LIMITS.hashSaltMaxLength ||
+    !HASH_SALT.test(value)
+  ) {
+    return refuse("invalid-hash-salt");
+  }
+  return value;
+}
+
+/** How an entry says its key is sent. One of the three words, written out: anything else — a word
+ * this version does not know, or no word at all — is refused, never read as `plain`. */
+function treatmentOf(value: unknown, salt: string | undefined): EmitTreatment {
+  const send = TREATMENTS.find((treatment) => treatment === value);
+  switch (send) {
+    case "plain":
+      return { kind: "plain", reservesPrefix: true };
+    case "omitted":
+      return { kind: "omitted" };
+    case "hashed":
+      return salt === undefined ? refuse("invalid-hash-salt") : { kind: "hashed", salt };
+    case undefined:
+      return refuse("undeclared-treatment");
+  }
+}
+
+/** What every entry of a version 1 file is sent as: what that version always sent. */
+const AS_VERSION_1_SENT: EmitTreatment = { kind: "plain", reservesPrefix: false };
+
+function emitOf(
+  value: unknown,
+  groupNames: readonly string[],
+  version: FileVersion,
+  salt: string | undefined,
+): RuleEmit {
+  const record = recordOf(value, version.emitKeys);
   const type = textOf(record.type, ATTRIBUTION_LIMITS.typeLength);
   // A type is the repository's own word and is never built from anything on the machine.
   if (/[{}]/.test(type)) {
     return refuse("unknown-placeholder");
   }
   const template = textOf(record.key, ATTRIBUTION_LIMITS.keyLength);
-  return { type, key: keyPartsOf(template, groupNames) };
+  const treatment = version.declaresTreatment ? treatmentOf(record.send, salt) : AS_VERSION_1_SENT;
+  return { type, key: keyPartsOf(template, groupNames), treatment };
 }
 
-function ruleOf(value: unknown, matcher: RuleMatcher): AttributionRule {
+function ruleOf(
+  value: unknown,
+  matcher: RuleMatcher,
+  version: FileVersion,
+  salt: string | undefined,
+): AttributionRule {
   const record = recordOf(value, RULE_KEYS);
   if (typeof record.from !== "string") {
     return refuse("invalid-shape");
   }
-  const from = SOURCES.find((source) => source === record.from);
+  const from = RULE_SOURCES.find((source) => source === record.from);
   if (from === undefined) {
     return refuse("unknown-source");
   }
@@ -265,7 +386,11 @@ function ruleOf(value: unknown, matcher: RuleMatcher): AttributionRule {
   if (emits.length === 0) {
     return refuse("invalid-shape");
   }
-  return { from, pattern, emit: emits.map((emit) => emitOf(emit, groupNames)) };
+  return {
+    from,
+    pattern,
+    emit: emits.map((emit) => emitOf(emit, groupNames, version, salt)),
+  };
 }
 
 /** The text of a rule file in; compiled rules, or the code of the first check it failed, out. */
@@ -283,12 +408,16 @@ export function parseAttributionRules(
     } catch {
       return refuse("not-json");
     }
-    const file = recordOf(parsed, FILE_KEYS);
-    if (file.version !== 1) {
+    // A file's keys are those of the version it names; a file that names no version this knows
+    // is held to the first one's, so that it is refused for the first thing wrong with it.
+    const version = (parsed as { version?: unknown } | null)?.version === 2 ? VERSION_2 : VERSION_1;
+    const file = recordOf(parsed, version.fileKeys);
+    if (file.version !== 1 && file.version !== 2) {
       return refuse("unsupported-version");
     }
+    const salt = hashSaltOf(file.hashSalt);
     const rules = listOf(file.attribution, ATTRIBUTION_LIMITS.rules);
-    return { kind: "rules", rules: rules.map((rule) => ruleOf(rule, matcher)) };
+    return { kind: "rules", rules: rules.map((rule) => ruleOf(rule, matcher, version, salt)) };
   } catch (error) {
     return { kind: "invalid", code: error instanceof InvalidRules ? error.code : "invalid-shape" };
   }
@@ -298,6 +427,8 @@ export interface AttributorOptions {
   /** The declared source name, already bounded by the configuration. Absent: not set. */
   readonly source?: string;
   readonly matcher?: RuleMatcher;
+  /** The digest of a hashed key. Replaced only by a test. */
+  readonly digest?: KeyDigest;
 }
 
 export interface AttributionState {
@@ -329,10 +460,41 @@ function keyOf(parts: readonly KeyPart[], groups: MatchGroups): string | undefin
 
 type MatchGroups = Readonly<Record<string, string | undefined>>;
 
-function dimensionsOf(rule: AttributionRule, groups: MatchGroups): TurnDimension[] {
+/**
+ * The key as it leaves the machine, or nothing.
+ *
+ * This is the only place a plain key becomes something that is sent, and it has one path that
+ * returns the plain key: the entry says `plain`. A digest that cannot be computed, or that does
+ * not come back as a digest, is no dimension — never the key it was asked about.
+ */
+function treated(emit: RuleEmit, plain: string, digest: KeyDigest): string | undefined {
+  const treatment = emit.treatment;
+  switch (treatment.kind) {
+    case "plain":
+      return treatment.reservesPrefix && plain.startsWith(HASHED_PREFIX) ? undefined : plain;
+    case "omitted":
+      return undefined;
+    case "hashed":
+      try {
+        const hex = digest(treatment.salt, emit.type, plain);
+        return typeof hex === "string" && DIGEST.test(hex) ? `${HASHED_PREFIX}${hex}` : undefined;
+      } catch {
+        return undefined;
+      }
+  }
+}
+
+function dimensionsOf(
+  rule: AttributionRule,
+  groups: MatchGroups,
+  digest: KeyDigest,
+): TurnDimension[] {
   const dimensions: TurnDimension[] = [];
   for (const emit of rule.emit) {
-    const key = keyOf(emit.key, groups);
+    // An entry is dropped for the same reasons under every treatment, so changing how a key is
+    // sent never changes which turns are labelled.
+    const plain = keyOf(emit.key, groups);
+    const key = plain === undefined ? undefined : treated(emit, plain, digest);
     if (key !== undefined) {
       dimensions.push({ type: emit.type, key });
     }
@@ -375,6 +537,7 @@ export function buildAttributor(
   options: AttributorOptions = {},
 ): AttributionState {
   const matcher = options.matcher ?? guardedMatch;
+  const digest = options.digest ?? saltedDigest;
   let disabled = false;
 
   const firstMatch = (from: RuleSource, text: string | undefined): RuleOutput | undefined => {
@@ -391,7 +554,7 @@ export function buildAttributor(
         return undefined;
       }
       if (result.kind === "match") {
-        return { index, dimensions: dimensionsOf(rule, result.groups) };
+        return { index, dimensions: dimensionsOf(rule, result.groups, digest) };
       }
     }
     return undefined;
