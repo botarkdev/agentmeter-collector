@@ -22,3 +22,27 @@ it is read fail-closed "because a later key may say a dimension is to be withhel
 | D8 | A dimension added later | no default in the file, an exhaustive switch in the code, and the content-safety suite failing when a source or a treatment has no case | **all three** | Each alone can be forgotten. |
 | D9 | Documents — *marked the owner's in part* | an entry under the changelog's unreleased heading; a row for `CLAUDE.md` with the paragraphs proposed; a row in the other repository for its guide; C002's decision record left as written with a new one beside it | **as proposed** | The changelog entry is the repository's convention for every change. The orchestrator opens the other repository's row. |
 | — | Where the verify stage sends | a loopback address with nothing listening · a name under a reserved domain | **loopback** | A reserved name still asks a resolver; nothing should leave the machine. |
+
+## implement gate
+
+Reviewed, uncommitted: twelve modified files and the new decision document; no manifest, lockfile,
+fixture, projection or contract file among them. Read by the orchestrator: the one function that
+turns a captured key into what is sent, and the digest. Checked by the orchestrator in the
+service's own source, which the lane may not read: a dimension's key is any text of 1 to 256
+characters, so a digest behind its prefix is accepted as a key like any other. Broken on purpose
+by the orchestrator, then restored byte-identical: a digest that raises made to send the plain key
+behind the prefix — two cases failed, one in the rules' suite and one through a whole run. As the
+lane reports them: 504 tests pass with coverage near 99%, the package builds and checks; twenty
+mutations of its own each went red, among them a missing `send` read as plain, an omitted key
+sent, and the salt written to a failure's detail.
+
+| # | Question | Options | Decision | Reason |
+|---|---|---|---|---|
+| 1 | Commit? | commit · change first | **commit**, as the three commits proposed | The evidence above. |
+| 2 | The reserved prefix holds for a second-version file only | accept · both versions | **accept** | Dropping such a key from a first-version file would change what 0.3.0 sends, which D1 ruled out. |
+| 3 | A salt present and out of bounds invalidates the file even when nothing is hashed; a digest that is not thirty-two hex characters is dropped | accept | **accept** | Both fail closed. |
+| 4 | The run's injected dependencies gain the digest, so a raising one can be shown through a whole run | accept, as an optional field · remove | **accept, optional** | An exported type must not start requiring a field of whoever builds it. |
+| 5 | One existing table row used version 2 as its example of an unknown version | approve its change to 3 · revert | **approve** | Version 2 is now known. |
+| 6 | "It is not a credential", in negation, in the decision document and a comment | keep · remove | **keep** | Saying what it is not is the honest sentence; the rule was against calling it one. |
+| 7 | The plan's body still says `hashKey` | leave, with one line saying the name as built · rewrite | **leave, with the line** | It is the plan as it was approved. |
+| 8 | The verify stage | after the commits, against a loopback address with nothing listening | **after the commits** | It runs the built package; nothing leaves the machine. |
