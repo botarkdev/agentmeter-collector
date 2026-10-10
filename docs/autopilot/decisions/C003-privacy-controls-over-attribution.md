@@ -46,3 +46,18 @@ sent, and the salt written to a failure's detail.
 | 6 | "It is not a credential", in negation, in the decision document and a comment | keep · remove | **keep** | Saying what it is not is the honest sentence; the rule was against calling it one. |
 | 7 | The plan's body still says `hashKey` | leave, with one line saying the name as built · rewrite | **leave, with the line** | It is the plan as it was approved. |
 | 8 | The verify stage | after the commits, against a loopback address with nothing listening | **after the commits** | It runs the built package; nothing leaves the machine. |
+
+## close
+
+Committed as `2fdf596` (the change), `ff8b46e` (its documents) and `b4eb514` (what the built
+package did in a throwaway repository against a loopback address with nothing listening: the
+queued batch held the digest, equal to one computed apart, and the plain value, the salt and the
+token nowhere under the cache directory). The injected digest is optional in the exported type.
+Row C008 opened for `CLAUDE.md`, with the paragraphs proposed in the feature's document.
+
+For the owner, first: the two decisions of the plan gate that the lane had marked theirs — no
+default at all in a second-version file, and the salt committed in the rule file. Then: the next
+release would be 0.4.0 by the repository's convention; the version was not touched.
+
+Pull request title:
+`feat(C003:attribution): let a repository withhold or hash what its attribution rules capture`.
