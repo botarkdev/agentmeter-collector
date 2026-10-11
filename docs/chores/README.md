@@ -8,3 +8,4 @@ was verified.
 | C001 | [Adopt taskrail with a backlog of the collector's own](./C001-adopt-taskrail-with-a-backlog-of-the-col.md) |
 | C005 | [Check the collector's contract against the service's pinned document](./C005-check-the-collector-s-contract-against-t.md) |
 | C006 | [License the collector under Apache-2.0](./C006-license-the-collector-under-apache-2-0.md) |
+| C008 | [Say in CLAUDE.md that a rule file can withhold or hash a key](./C008-say-in-claude-md-that-a-rule-file-can-wi.md) |

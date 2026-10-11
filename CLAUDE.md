@@ -33,7 +33,10 @@ refactor; say so and stop.
    a repository that committed attribution rules, `dimensions`: pairs of a `type` that is a
    constant of that file and a `key` built from what the file's own patterns capture of the
    turn's recorded branch name or of the name declared in `AGENTMETER_SOURCE`. Those two sources
-   are a closed set. Nothing derived from message content, tool input or output, file contents,
+   are a closed set. A version 2 file says on every entry whether its key is sent as built, as a
+   salted digest, or not at all (`specs/attribution-privacy/decision.md`); there is no default, and
+   the treatment is applied in `src/attribution/` before a dimension exists. Nothing derived from
+   message content, tool input or output, file contents,
    file paths, the working directory or a session's name or title is transmitted, and nothing of a
    branch beyond what a committed rule captures. This is enforced by an allowlist projection
    (`src/contract/measurement-projection.ts`), by the single-field input of the attribution
@@ -70,6 +73,10 @@ refactor; say so and stop.
   rule 2: what a repository's `.agentmeter.json` may declare, exactly what then leaves the
   machine, why a session's name never does, and why the file is read fail-closed. It reverses
   three statements of the record below.
+- [`specs/attribution-privacy/decision.md`](specs/attribution-privacy/decision.md) — how a
+  repository says a captured key is sent plain, hashed or omitted; what the digest is; what the
+  committed salt does and does not protect from; and why an entry that does not say invalidates
+  the file.
 - [`specs/0019-claude-code-collector/`](specs/0019-claude-code-collector/) — the design record:
   the spec, the research decisions, and the two contracts (`contracts/ingest-submission.md`,
   `contracts/run-outcome.md`). Read `research.md` before changing how scanning, queueing or
@@ -147,9 +154,11 @@ make a change pass.
 **Configuration**: every value comes from the environment (`README.md`, "Configuration"). No
 endpoint, token, host or port is committed to any file, as a default or as an example that could
 be mistaken for one. The one file a repository commits for the collector, `.agentmeter.json`,
-holds attribution rules and nothing else (`README.md`, "Attribution"); it is read fail-closed —
-an unknown key invalidates the whole file — and that must stay so, because a later key may say a
-dimension is to be withheld. A tuning variable that is not valid falls back to its default and is reported
+holds attribution rules, how each key they build is sent, and the salt of the keys sent hashed —
+and nothing else (`README.md`, "Attribution"). The salt is not a credential: it protects nothing
+from a reader of the repository. The file is read fail-closed — an unknown key, or a version 2
+entry that does not say how its key is sent, invalidates the whole file — and that must stay so:
+it is what keeps a key from being sent in clear by omission. A tuning variable that is not valid falls back to its default and is reported
 as an `invalid-setting` failure naming the variable, never its value.
 
 **CI**: `.github/workflows/tests.yml` — formatting, types, the unit suite under coverage, the
@@ -176,8 +185,8 @@ is still missing. Nothing is published to a package registry.
 
 **Not here yet**: publication to a package registry — the package stays `private` so that it
 cannot be published to one by accident, and its name is not settled (`@agentmeter/collector` is a
-scope nobody has registered). Nor privacy controls over attribution — omitting or hashing a
-dimension — (`TASKRAIL.md` row `C003`), or a second agent adapter (`C004`). What is left to do is in
+scope nobody has registered). Nor a second agent adapter (`TASKRAIL.md` row `C004`). What is left
+to do is in
 [`TASKRAIL.md`](TASKRAIL.md).
 
 **The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
