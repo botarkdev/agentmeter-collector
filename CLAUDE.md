@@ -122,7 +122,7 @@ only.
 | `pnpm test:cov` | The same, with coverage; fails below 80% lines, statements, functions or branches. |
 | `pnpm typecheck` | Type-checks sources and tests. |
 | `pnpm format:check` | Fails on a file Prettier would rewrite. `pnpm format` rewrites it. |
-| `pnpm build` | Removes `dist/` and compiles `src/` into it. `dist/` is the whole package: `package.json` ships nothing else. |
+| `pnpm build` | Removes `dist/` and compiles `src/` into it. `dist/` is the compiled package; `package.json` ships it and `NOTICE` (the Apache-2.0 attribution) and nothing else. |
 | `pnpm check:package` | After a build: packs the collector as a release does, checks what is and is not in the file, installs it into an empty project with no network and runs the installed binary. The only check on the artefact — the unit suite imports `src/` and cannot see a package that ships without its binary. |
 
 **Refreshing the contract copy**: by hand, when the service raises its document's `version` —
@@ -189,10 +189,13 @@ scope nobody has registered). Nor a second agent adapter (`TASKRAIL.md` row `C00
 to do is in
 [`TASKRAIL.md`](TASKRAIL.md).
 
-**The licence is the owner's open decision.** `LICENSE` is the proprietary notice the code
-carried in the service's repository: it grants nobody permission to use it. That is at odds with
-a public collector people are meant to install, and it must be settled before the package is
-published. Do not choose a licence yourself.
+**The collector is licensed under Apache-2.0** (`TASKRAIL.md` row `C006`). `LICENSE` is the
+unmodified Apache License 2.0 text, so it names nobody; the attribution lives in `NOTICE`
+(`agentmeter-collector`, the holder the previous file named), which the licence carries with every
+copy and which `package.json` ships. `package.json`'s `license` field says `Apache-2.0`. This
+replaced the proprietary notice the code had carried in the service's repository, which granted
+nobody permission to use it — at odds with a public collector people are meant to install. The
+choice is settled; do not change the licence without the owner.
 
 ## Language
 
